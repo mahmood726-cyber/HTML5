@@ -666,7 +666,20 @@
         color: var(--text-tertiary);
         font-family: var(--font-sans);
     }
-    
+
+    /* Screen reader only utility class */
+    .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
     /* Toast Notification */
     .toast {
         position: fixed;
@@ -759,19 +772,19 @@
     }
 </style>
 
-</head> <body> <!-- Header --> <header class="masthead"> <div class="masthead-inner"> <div class="brand"> <div class="brand-logo">DTA</div> <div class="brand-info"> <h1>DTA Meta-Analysis Suite</h1> <p>Diagnostic Test Accuracy Analysis v2.0</p> </div> </div> <div class="masthead-controls"> <div class="control-pill"> <label>Model</label> <select id="modelSelect"> <option value="bivariate">Bivariate REML</option> <option value="hsroc">HSROC</option> <option value="univariate">Univariate RE</option> </select> </div> <div class="control-pill"> <label>CI</label> <select id="ciSelect"> <option value="0.95">95%</option> <option value="0.90">90%</option> <option value="0.99">99%</option> </select> </div> <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme"> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"> <circle cx="12" cy="12" r="5"/> <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/> </svg> </button> </div> </div> </header>
+</head> <body> <!-- Header --> <header class="masthead" role="banner"> <div class="masthead-inner"> <div class="brand"> <div class="brand-logo" aria-hidden="true">DTA</div> <div class="brand-info"> <h1>DTA Meta-Analysis Suite</h1> <p>Diagnostic Test Accuracy Analysis v2.0</p> </div> </div> <div class="masthead-controls"> <div class="control-pill"> <label for="modelSelect" id="modelLabel">Model</label> <select id="modelSelect" aria-labelledby="modelLabel" aria-describedby="modelDesc"> <option value="bivariate">Bivariate REML</option> <option value="hsroc">HSROC</option> <option value="univariate">Univariate RE</option> </select> <span id="modelDesc" class="sr-only">Select the statistical model for meta-analysis</span> </div> <div class="control-pill"> <label for="ciSelect" id="ciLabel">CI</label> <select id="ciSelect" aria-labelledby="ciLabel" aria-describedby="ciDesc"> <option value="0.95">95%</option> <option value="0.90">90%</option> <option value="0.99">99%</option> </select> <span id="ciDesc" class="sr-only">Select confidence interval level</span> </div> <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle light/dark theme"> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"> <circle cx="12" cy="12" r="5"/> <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/> </svg> </button> </div> </div> </header>
 <!-- Navigation -->
-<nav class="nav-bar">
-    <div class="nav-inner">
-        <button class="nav-tab active" data-view="data">Data Entry</button>
-        <button class="nav-tab" data-view="summary">Summary Statistics</button>
-        <button class="nav-tab" data-view="forest">Forest Plots</button>
-        <button class="nav-tab" data-view="sroc">SROC Curve</button>
-        <button class="nav-tab" data-view="heterogeneity">Heterogeneity</button>
-        <button class="nav-tab" data-view="quadas">QUADAS-2</button>
-        <button class="nav-tab" data-view="fagan">Fagan Nomogram</button>
-        <button class="nav-tab" data-view="bias">Publication Bias</button>
-        <button class="nav-tab" data-view="export">Export</button>
+<nav class="nav-bar" role="navigation" aria-label="Main navigation">
+    <div class="nav-inner" role="tablist" aria-label="Analysis sections">
+        <button class="nav-tab active" data-view="data" role="tab" aria-selected="true" aria-controls="data">Data Entry</button>
+        <button class="nav-tab" data-view="summary" role="tab" aria-selected="false" aria-controls="summary">Summary Statistics</button>
+        <button class="nav-tab" data-view="forest" role="tab" aria-selected="false" aria-controls="forest">Forest Plots</button>
+        <button class="nav-tab" data-view="sroc" role="tab" aria-selected="false" aria-controls="sroc">SROC Curve</button>
+        <button class="nav-tab" data-view="heterogeneity" role="tab" aria-selected="false" aria-controls="heterogeneity">Heterogeneity</button>
+        <button class="nav-tab" data-view="quadas" role="tab" aria-selected="false" aria-controls="quadas">QUADAS-2</button>
+        <button class="nav-tab" data-view="fagan" role="tab" aria-selected="false" aria-controls="fagan">Fagan Nomogram</button>
+        <button class="nav-tab" data-view="bias" role="tab" aria-selected="false" aria-controls="bias">Publication Bias</button>
+        <button class="nav-tab" data-view="export" role="tab" aria-selected="false" aria-controls="export">Export</button>
     </div>
 </nav>
 
@@ -1329,15 +1342,98 @@ Run analysis first to generate R code
 </main>
 
 <!-- Toast -->
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="alert" aria-live="polite" aria-atomic="true"></div>
 
 <script>
+// ========================
+// CONSTANTS
+// ========================
+const STAT_CONSTANTS = {
+    LOGIT_BOUND_LOW: 0.0001,
+    LOGIT_BOUND_HIGH: 0.9999,
+    Z_95: 1.96,
+    Z_99: 2.576,
+    Z_90: 1.645,
+    CONTINUITY_CORRECTION: 0.5,
+    MIN_STUDIES_BIVARIATE: 3,
+    MIN_STUDIES_SROC: 2,
+    MIN_STUDIES_UNIVARIATE: 2,
+    MAX_STUDY_NAME_LENGTH: 100,
+    MAX_CELL_VALUE: 1e9,
+    DEBOUNCE_DELAY: 150
+};
+
 // ========================
 // GLOBAL STATE
 // ========================
 let studies = [];
 let results = null;
 let quadasData = {};
+let renderTimeout = null;
+let currentModel = 'bivariate';
+
+// ========================
+// UTILITY FUNCTIONS
+// ========================
+
+/**
+ * Escape HTML special characters to prevent XSS attacks
+ * @param {string} str - String to escape
+ * @returns {string} Escaped string safe for HTML insertion
+ */
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+}
+
+/**
+ * Validate and parse numeric input for cell values
+ * @param {string|number} value - Input value to validate
+ * @returns {number|string} Validated number, empty string if blank, or null if invalid
+ */
+function validateNumericInput(value) {
+    if (value === '' || value === null || value === undefined) return '';
+    const num = parseFloat(value);
+    if (isNaN(num) || num < 0 || num > STAT_CONSTANTS.MAX_CELL_VALUE) return null;
+    return Math.floor(num); // Cell counts must be integers
+}
+
+/**
+ * Validate study name input
+ * @param {string} name - Study name to validate
+ * @returns {string} Sanitized study name
+ */
+function validateStudyName(name) {
+    if (!name || typeof name !== 'string') return 'Unnamed Study';
+    return name.substring(0, STAT_CONSTANTS.MAX_STUDY_NAME_LENGTH).trim() || 'Unnamed Study';
+}
+
+/**
+ * Escape a string for CSV output (handles quotes and commas)
+ * @param {string} str - String to escape
+ * @returns {string} CSV-safe escaped string
+ */
+function escapeCSV(str) {
+    if (str === null || str === undefined) return '';
+    const s = String(str);
+    // If contains comma, quote, or newline, wrap in quotes and escape internal quotes
+    if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+}
+
+/**
+ * Escape a string for R code output
+ * @param {string} str - String to escape
+ * @returns {string} R-safe escaped string
+ */
+function escapeRString(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
 
 // ========================
 // THEME TOGGLE
@@ -1396,34 +1492,58 @@ function removeStudy(id) {
     updateQuickStats();
 }
 
+/**
+ * Update a study's field value with validation and debounced rendering
+ * @param {number} id - Study ID
+ * @param {string} field - Field name to update
+ * @param {string|number} value - New value
+ */
 function updateStudy(id, field, value) {
     const study = studies.find(s => s.id === id);
-    if (study) {
-        study[field] = field === 'name' ? value : (value === '' ? '' : parseFloat(value));
+    if (!study) return;
+
+    if (field === 'name') {
+        study[field] = validateStudyName(value);
+    } else {
+        const validated = validateNumericInput(value);
+        if (validated === null) {
+            showToast('Invalid value: must be a non-negative integer', 'error');
+            return;
+        }
+        study[field] = validated;
+    }
+
+    // Debounce rendering for better performance
+    clearTimeout(renderTimeout);
+    renderTimeout = setTimeout(() => {
         renderDataTable();
         updateQuickStats();
-    }
+    }, STAT_CONSTANTS.DEBOUNCE_DELAY);
 }
 
+/**
+ * Render the data entry table with escaped HTML for XSS protection
+ */
 function renderDataTable() {
     const tbody = document.getElementById('dataBody');
     tbody.innerHTML = studies.map(study => {
         const sens = calcSensitivity(study);
         const spec = calcSpecificity(study);
+        const escapedName = escapeHtml(study.name);
         return `
             <tr>
-                <td><input type="text" value="${study.name}" onchange="updateStudy(${study.id}, 'name', this.value)"></td>
-                <td><input type="number" min="0" value="${study.tp}" onchange="updateStudy(${study.id}, 'tp', this.value)"></td>
-                <td><input type="number" min="0" value="${study.fp}" onchange="updateStudy(${study.id}, 'fp', this.value)"></td>
-                <td><input type="number" min="0" value="${study.fn}" onchange="updateStudy(${study.id}, 'fn', this.value)"></td>
-                <td><input type="number" min="0" value="${study.tn}" onchange="updateStudy(${study.id}, 'tn', this.value)"></td>
+                <td><input type="text" value="${escapedName}" maxlength="${STAT_CONSTANTS.MAX_STUDY_NAME_LENGTH}" onchange="updateStudy(${study.id}, 'name', this.value)" aria-label="Study name"></td>
+                <td><input type="number" min="0" max="${STAT_CONSTANTS.MAX_CELL_VALUE}" value="${study.tp}" onchange="updateStudy(${study.id}, 'tp', this.value)" aria-label="True positives"></td>
+                <td><input type="number" min="0" max="${STAT_CONSTANTS.MAX_CELL_VALUE}" value="${study.fp}" onchange="updateStudy(${study.id}, 'fp', this.value)" aria-label="False positives"></td>
+                <td><input type="number" min="0" max="${STAT_CONSTANTS.MAX_CELL_VALUE}" value="${study.fn}" onchange="updateStudy(${study.id}, 'fn', this.value)" aria-label="False negatives"></td>
+                <td><input type="number" min="0" max="${STAT_CONSTANTS.MAX_CELL_VALUE}" value="${study.tn}" onchange="updateStudy(${study.id}, 'tn', this.value)" aria-label="True negatives"></td>
                 <td style="font-family: var(--font-mono); color: var(--sensitivity);">${sens !== null ? (sens * 100).toFixed(1) + '%' : '—'}</td>
                 <td style="font-family: var(--font-mono); color: var(--specificity);">${spec !== null ? (spec * 100).toFixed(1) + '%' : '—'}</td>
-                <td><button class="delete-btn" onclick="removeStudy(${study.id})">×</button></td>
+                <td><button class="delete-btn" onclick="removeStudy(${study.id})" aria-label="Remove study">×</button></td>
             </tr>
         `;
     }).join('');
-    
+
     renderQUADASGrid();
 }
 
@@ -1483,126 +1603,235 @@ function loadExampleData() {
 // STATISTICAL FUNCTIONS
 // ========================
 
-// Logit and inverse logit
+/**
+ * Logit (log-odds) transformation with bounds protection
+ * @param {number} p - Probability value (0-1)
+ * @returns {number} Log-odds value
+ */
 function logit(p) {
-    p = Math.max(0.0001, Math.min(0.9999, p));
+    p = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, Math.min(STAT_CONSTANTS.LOGIT_BOUND_HIGH, p));
     return Math.log(p / (1 - p));
 }
 
+/**
+ * Inverse logit (expit) transformation
+ * @param {number} x - Log-odds value
+ * @returns {number} Probability value (0-1)
+ */
 function invLogit(x) {
+    // Protect against overflow
+    if (x > 700) return 1;
+    if (x < -700) return 0;
     return 1 / (1 + Math.exp(-x));
 }
 
-// Wilson score interval for single proportion
-function wilsonCI(x, n, z = 1.96) {
+/**
+ * Wilson score confidence interval for a single proportion
+ * More accurate than normal approximation, especially for extreme proportions
+ * @param {number} x - Number of successes
+ * @param {number} n - Total sample size
+ * @param {number} [z=1.96] - Z-score for confidence level (default 95%)
+ * @returns {{lower: number, upper: number}} Confidence interval bounds
+ */
+function wilsonCI(x, n, z = STAT_CONSTANTS.Z_95) {
     if (n === 0) return { lower: 0, upper: 1 };
     const p = x / n;
     const denom = 1 + z * z / n;
     const center = p + z * z / (2 * n);
-    const margin = z * Math.sqrt((p * (1 - p) + z * z / (4 * n)) / n);
+    const margin = z * Math.sqrt(Math.max(0, (p * (1 - p) + z * z / (4 * n)) / n));
     return {
         lower: Math.max(0, (center - margin) / denom),
         upper: Math.min(1, (center + margin) / denom)
     };
 }
 
-// Calculate study-level statistics
+/**
+ * Safe square root that handles floating-point edge cases
+ * @param {number} x - Value to take square root of
+ * @returns {number} Square root, or 0 if x is negative due to floating-point errors
+ */
+function safeSqrt(x) {
+    return Math.sqrt(Math.max(0, x));
+}
+
+/**
+ * Calculate study-level statistics including transformations and variances
+ * @param {Object} study - Study object with tp, fp, fn, tn values
+ * @returns {Object} Computed statistics for the study
+ */
 function calcStudyStats(study) {
     const tp = study.tp, fp = study.fp, fn = study.fn, tn = study.tn;
     const diseased = tp + fn;
     const healthy = fp + tn;
     const total = diseased + healthy;
-    
+
     const sens = diseased > 0 ? tp / diseased : 0;
     const spec = healthy > 0 ? tn / healthy : 0;
-    
-    // Add 0.5 continuity correction for zero cells
-    const tpC = tp + 0.5, fpC = fp + 0.5, fnC = fn + 0.5, tnC = tn + 0.5;
+
+    // Add continuity correction for zero cells
+    const cc = STAT_CONSTANTS.CONTINUITY_CORRECTION;
+    const tpC = tp + cc, fpC = fp + cc, fnC = fn + cc, tnC = tn + cc;
     const diseasedC = tpC + fnC, healthyC = fpC + tnC;
-    
+
     const sensLogit = logit(tpC / diseasedC);
     const specLogit = logit(tnC / healthyC);
-    
+
     // Variance of logit-transformed proportions
     const varSensLogit = 1 / tpC + 1 / fnC;
     const varSpecLogit = 1 / tnC + 1 / fpC;
-    
+
     // DOR with continuity correction
     const dor = (tpC * tnC) / (fpC * fnC);
     const logDOR = Math.log(dor);
     const varLogDOR = 1/tpC + 1/fpC + 1/fnC + 1/tnC;
-    
+
     // Wilson CIs
     const sensCI = wilsonCI(tp, diseased);
     const specCI = wilsonCI(tn, healthy);
-    
+
     return {
         sens, spec, sensCI, specCI,
         sensLogit, specLogit, varSensLogit, varSpecLogit,
         dor, logDOR, varLogDOR,
         diseased, healthy, total,
-        tp, fp, fn, tn
+        tp, fp, fn, tn,
+        name: study.name
     };
 }
 
-// DerSimonian-Laird random effects for univariate meta-analysis
-function univariateRE(values, variances) {
+/**
+ * DerSimonian-Laird random effects meta-analysis for univariate outcome
+ * @param {number[]} values - Effect estimates from each study
+ * @param {number[]} variances - Within-study variances for each estimate
+ * @param {number} [zScore=1.96] - Z-score for confidence interval
+ * @returns {Object|null} Meta-analysis results or null if no data
+ */
+function univariateRE(values, variances, zScore = STAT_CONSTANTS.Z_95) {
     const k = values.length;
     if (k === 0) return null;
-    
+
     // Fixed effect weights and estimate
-    const weights = variances.map(v => 1 / v);
+    const weights = variances.map(v => v > 0 ? 1 / v : 0);
     const sumW = weights.reduce((a, b) => a + b, 0);
+    if (sumW === 0) return null;
+
     const fixedEst = weights.reduce((sum, w, i) => sum + w * values[i], 0) / sumW;
-    
-    // Q statistic
+
+    // Q statistic for heterogeneity
     const Q = weights.reduce((sum, w, i) => sum + w * Math.pow(values[i] - fixedEst, 2), 0);
-    
-    // DerSimonian-Laird tau-squared
+
+    // DerSimonian-Laird tau-squared estimation
     const sumW2 = weights.reduce((a, b) => a + b * b, 0);
     const C = sumW - sumW2 / sumW;
-    let tau2 = Math.max(0, (Q - (k - 1)) / C);
-    
+    let tau2 = C > 0 ? Math.max(0, (Q - (k - 1)) / C) : 0;
+
     // Random effects weights and estimate
     const reWeights = variances.map(v => 1 / (v + tau2));
     const sumREW = reWeights.reduce((a, b) => a + b, 0);
     const reEst = reWeights.reduce((sum, w, i) => sum + w * values[i], 0) / sumREW;
     const reVar = 1 / sumREW;
-    const reSE = Math.sqrt(reVar);
-    
-    // I-squared
-    const I2 = k > 1 ? Math.max(0, (Q - (k - 1)) / Q * 100) : 0;
-    
+    const reSE = safeSqrt(reVar);
+
+    // I-squared: proportion of variance due to heterogeneity
+    const I2 = k > 1 && Q > 0 ? Math.max(0, (Q - (k - 1)) / Q * 100) : 0;
+
+    // p-value for Q statistic (chi-squared with k-1 df)
+    const pQ = k > 1 ? 1 - chiSquareCDF(Q, k - 1) : 1;
+
     return {
         estimate: reEst,
         se: reSE,
-        ci: [reEst - 1.96 * reSE, reEst + 1.96 * reSE],
+        ci: [reEst - zScore * reSE, reEst + zScore * reSE],
         tau2,
         Q,
+        pQ,
         I2,
         k
     };
 }
 
-// Bivariate random effects model (simplified REML-like estimation)
+/**
+ * Chi-squared cumulative distribution function approximation
+ * @param {number} x - Chi-squared value
+ * @param {number} df - Degrees of freedom
+ * @returns {number} Cumulative probability
+ */
+function chiSquareCDF(x, df) {
+    if (x <= 0 || df <= 0) return 0;
+    // Use incomplete gamma function approximation
+    return gammaCDF(x / 2, df / 2);
+}
+
+/**
+ * Gamma CDF using series expansion (for chi-squared calculation)
+ * @param {number} x - Value
+ * @param {number} a - Shape parameter
+ * @returns {number} Cumulative probability
+ */
+function gammaCDF(x, a) {
+    if (x <= 0) return 0;
+    if (a <= 0) return 1;
+
+    // Series expansion for lower incomplete gamma
+    let sum = 0;
+    let term = 1 / a;
+    sum = term;
+
+    for (let n = 1; n < 200; n++) {
+        term *= x / (a + n);
+        sum += term;
+        if (Math.abs(term) < 1e-12) break;
+    }
+
+    const logGamma = gammaLn(a);
+    return Math.min(1, sum * Math.exp(-x + a * Math.log(x) - logGamma));
+}
+
+/**
+ * Log gamma function approximation (Stirling's approximation with correction)
+ * @param {number} x - Input value
+ * @returns {number} ln(Gamma(x))
+ */
+function gammaLn(x) {
+    if (x <= 0) return Infinity;
+    const c = [76.18009172947146, -86.50532032941677, 24.01409824083091,
+               -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
+    let y = x;
+    let tmp = x + 5.5;
+    tmp -= (x + 0.5) * Math.log(tmp);
+    let ser = 1.000000000190015;
+    for (let j = 0; j < 6; j++) {
+        ser += c[j] / ++y;
+    }
+    return -tmp + Math.log(2.5066282746310005 * ser / x);
+}
+
+/**
+ * Bivariate random effects model for DTA meta-analysis (Reitsma approach)
+ * Jointly models logit(sensitivity) and logit(specificity)
+ * @param {Object[]} studyStats - Array of study statistics from calcStudyStats
+ * @returns {Object|null} Model results or null if insufficient data
+ */
 function bivariateModel(studyStats) {
     const k = studyStats.length;
-    if (k < 3) return null;
-    
+    if (k < STAT_CONSTANTS.MIN_STUDIES_BIVARIATE) return null;
+
     // Extract logit-transformed values
     const sensLogits = studyStats.map(s => s.sensLogit);
     const specLogits = studyStats.map(s => s.specLogit);
     const varSens = studyStats.map(s => s.varSensLogit);
     const varSpec = studyStats.map(s => s.varSpecLogit);
-    
+
     // Univariate estimates first
     const sensRE = univariateRE(sensLogits, varSens);
     const specRE = univariateRE(specLogits, varSpec);
-    
+
+    if (!sensRE || !specRE) return null;
+
     // Correlation between logit(sens) and logit(spec) across studies
     const meanSens = sensLogits.reduce((a, b) => a + b, 0) / k;
     const meanSpec = specLogits.reduce((a, b) => a + b, 0) / k;
-    
+
     let sumProd = 0, sumSensSq = 0, sumSpecSq = 0;
     for (let i = 0; i < k; i++) {
         const ds = sensLogits[i] - meanSens;
@@ -1611,36 +1840,51 @@ function bivariateModel(studyStats) {
         sumSensSq += ds * ds;
         sumSpecSq += dc * dc;
     }
-    
-    const correlation = sumProd / Math.sqrt(sumSensSq * sumSpecSq);
-    
+
+    // Fix division by zero: check denominator before dividing
+    const denom = safeSqrt(sumSensSq * sumSpecSq);
+    const correlation = denom > 0 ? sumProd / denom : 0;
+
     // Transform back to probability scale
     const pooledSens = invLogit(sensRE.estimate);
     const pooledSpec = invLogit(specRE.estimate);
-    
+
     // CI on probability scale
     const sensLower = invLogit(sensRE.ci[0]);
     const sensUpper = invLogit(sensRE.ci[1]);
     const specLower = invLogit(specRE.ci[0]);
     const specUpper = invLogit(specRE.ci[1]);
-    
-    // Likelihood ratios
-    const PLR = pooledSens / (1 - pooledSpec);
-    const NLR = (1 - pooledSens) / pooledSpec;
-    
+
+    // Likelihood ratios with protection against division by zero
+    const oneMinusSpec = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, 1 - pooledSpec);
+    const oneMinusSens = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, 1 - pooledSens);
+    const safeSpec = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, pooledSpec);
+    const safeSens = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, pooledSens);
+
+    const PLR = safeSens / oneMinusSpec;
+    const NLR = oneMinusSens / safeSpec;
+
     // DOR
     const DOR = PLR / NLR;
-    
-    // Approximate CIs for LRs using delta method
-    const plrSE = PLR * Math.sqrt(Math.pow(sensRE.se, 2) + Math.pow(specRE.se, 2));
-    const nlrSE = NLR * Math.sqrt(Math.pow(sensRE.se, 2) + Math.pow(specRE.se, 2));
-    
-    // Log-scale CIs for LRs
+
+    // Proper log-scale CIs for likelihood ratios using delta method
     const logPLR = Math.log(PLR);
     const logNLR = Math.log(NLR);
-    const logPLRSE = Math.sqrt(Math.pow(sensRE.se / pooledSens, 2) + Math.pow(specRE.se / (1 - pooledSpec), 2));
-    const logNLRSE = Math.sqrt(Math.pow(sensRE.se / (1 - pooledSens), 2) + Math.pow(specRE.se / pooledSpec, 2));
-    
+
+    // Variance on log scale for PLR: var(log(sens)) + var(log(1-spec))
+    const varLogSens = Math.pow(sensRE.se / safeSens, 2);
+    const varLogOneMinusSpec = Math.pow(specRE.se / oneMinusSpec, 2);
+    const logPLRSE = safeSqrt(varLogSens + varLogOneMinusSpec);
+
+    // Variance on log scale for NLR
+    const varLogOneMinusSens = Math.pow(sensRE.se / oneMinusSens, 2);
+    const varLogSpec = Math.pow(specRE.se / safeSpec, 2);
+    const logNLRSE = safeSqrt(varLogOneMinusSens + varLogSpec);
+
+    // DOR CI using log-scale variance
+    const logDOR = Math.log(DOR);
+    const logDORSE = safeSqrt(varLogSens + varLogOneMinusSpec + varLogOneMinusSens + varLogSpec);
+
     return {
         sensitivity: {
             estimate: pooledSens,
@@ -1648,7 +1892,9 @@ function bivariateModel(studyStats) {
             se: sensRE.se,
             logit: sensRE.estimate,
             tau2: sensRE.tau2,
-            I2: sensRE.I2
+            I2: sensRE.I2,
+            Q: sensRE.Q,
+            pQ: sensRE.pQ
         },
         specificity: {
             estimate: pooledSpec,
@@ -1656,22 +1902,256 @@ function bivariateModel(studyStats) {
             se: specRE.se,
             logit: specRE.estimate,
             tau2: specRE.tau2,
-            I2: specRE.I2
+            I2: specRE.I2,
+            Q: specRE.Q,
+            pQ: specRE.pQ
         },
         PLR: {
             estimate: PLR,
-            ci: [Math.exp(logPLR - 1.96 * logPLRSE), Math.exp(logPLR + 1.96 * logPLRSE)]
+            ci: [Math.exp(logPLR - STAT_CONSTANTS.Z_95 * logPLRSE),
+                 Math.exp(logPLR + STAT_CONSTANTS.Z_95 * logPLRSE)]
         },
         NLR: {
             estimate: NLR,
-            ci: [Math.exp(logNLR - 1.96 * logNLRSE), Math.exp(logNLR + 1.96 * logNLRSE)]
+            ci: [Math.exp(logNLR - STAT_CONSTANTS.Z_95 * logNLRSE),
+                 Math.exp(logNLR + STAT_CONSTANTS.Z_95 * logNLRSE)]
         },
         DOR: {
             estimate: DOR,
-            ci: [DOR * 0.5, DOR * 2] // Rough approximation
+            ci: [Math.exp(logDOR - STAT_CONSTANTS.Z_95 * logDORSE),
+                 Math.exp(logDOR + STAT_CONSTANTS.Z_95 * logDORSE)]
         },
         correlation,
-        k
+        k,
+        modelType: 'bivariate'
+    };
+}
+
+/**
+ * HSROC (Hierarchical Summary ROC) model implementation
+ * Rutter-Gatsonis parameterization focusing on accuracy and threshold
+ * @param {Object[]} studyStats - Array of study statistics from calcStudyStats
+ * @returns {Object|null} Model results or null if insufficient data
+ */
+function hsrocModel(studyStats) {
+    const k = studyStats.length;
+    if (k < STAT_CONSTANTS.MIN_STUDIES_BIVARIATE) return null;
+
+    // HSROC uses D (accuracy proxy) and S (threshold proxy) parameterization
+    // D = logit(sens) + logit(spec) = log(DOR)
+    // S = logit(sens) - logit(spec) = threshold parameter
+
+    const D = studyStats.map(s => s.sensLogit + s.specLogit);
+    const S = studyStats.map(s => s.sensLogit - s.specLogit);
+
+    // Variances for D and S (assuming independence, which is approximate)
+    const varD = studyStats.map(s => s.varSensLogit + s.varSpecLogit);
+    const varS = studyStats.map(s => s.varSensLogit + s.varSpecLogit);
+
+    // Meta-analyze D (overall accuracy) and S (threshold)
+    const dRE = univariateRE(D, varD);
+    const sRE = univariateRE(S, varS);
+
+    if (!dRE || !sRE) return null;
+
+    // HSROC parameters
+    const Lambda = dRE.estimate;  // Overall log-DOR (accuracy parameter)
+    const Theta = sRE.estimate;   // Threshold parameter (positivity criterion)
+
+    // Beta: asymmetry parameter (slope of SROC curve)
+    // Estimated from regression of D on S
+    const meanD = D.reduce((a, b) => a + b, 0) / k;
+    const meanS = S.reduce((a, b) => a + b, 0) / k;
+
+    let sumSD = 0, sumSS = 0;
+    for (let i = 0; i < k; i++) {
+        sumSD += (S[i] - meanS) * (D[i] - meanD);
+        sumSS += (S[i] - meanS) * (S[i] - meanS);
+    }
+
+    const beta = sumSS > 0 ? sumSD / sumSS : 0;
+
+    // Convert back to sensitivity/specificity at the summary threshold
+    // At threshold Theta: sensLogit = (Lambda + Theta)/2, specLogit = (Lambda - Theta)/2
+    const summaryLogitSens = (Lambda + Theta) / 2;
+    const summaryLogitSpec = (Lambda - Theta) / 2;
+
+    const pooledSens = invLogit(summaryLogitSens);
+    const pooledSpec = invLogit(summaryLogitSpec);
+
+    // Approximate variances using delta method
+    const varLogitSens = (dRE.se * dRE.se + sRE.se * sRE.se) / 4;
+    const varLogitSpec = (dRE.se * dRE.se + sRE.se * sRE.se) / 4;
+
+    const seLogitSens = safeSqrt(varLogitSens);
+    const seLogitSpec = safeSqrt(varLogitSpec);
+
+    // CIs on probability scale
+    const sensLower = invLogit(summaryLogitSens - STAT_CONSTANTS.Z_95 * seLogitSens);
+    const sensUpper = invLogit(summaryLogitSens + STAT_CONSTANTS.Z_95 * seLogitSens);
+    const specLower = invLogit(summaryLogitSpec - STAT_CONSTANTS.Z_95 * seLogitSpec);
+    const specUpper = invLogit(summaryLogitSpec + STAT_CONSTANTS.Z_95 * seLogitSpec);
+
+    // Likelihood ratios
+    const oneMinusSpec = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, 1 - pooledSpec);
+    const oneMinusSens = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, 1 - pooledSens);
+    const safeSpec = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, pooledSpec);
+    const safeSens = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, pooledSens);
+
+    const PLR = safeSens / oneMinusSpec;
+    const NLR = oneMinusSens / safeSpec;
+    const DOR = Math.exp(Lambda);
+
+    // CIs for likelihood ratios
+    const logPLR = Math.log(PLR);
+    const logNLR = Math.log(NLR);
+    const logPLRSE = safeSqrt(varLogitSens / (safeSens * safeSens) + varLogitSpec / (oneMinusSpec * oneMinusSpec));
+    const logNLRSE = safeSqrt(varLogitSens / (oneMinusSens * oneMinusSens) + varLogitSpec / (safeSpec * safeSpec));
+
+    // I² for overall accuracy (D)
+    const I2Accuracy = dRE.I2;
+
+    // Between-study variance components
+    const tau2Theta = sRE.tau2;  // Threshold variation
+    const tau2Lambda = dRE.tau2; // Accuracy variation
+
+    return {
+        sensitivity: {
+            estimate: pooledSens,
+            ci: [sensLower, sensUpper],
+            se: seLogitSens,
+            logit: summaryLogitSens,
+            tau2: tau2Lambda / 4 + tau2Theta / 4,
+            I2: I2Accuracy
+        },
+        specificity: {
+            estimate: pooledSpec,
+            ci: [specLower, specUpper],
+            se: seLogitSpec,
+            logit: summaryLogitSpec,
+            tau2: tau2Lambda / 4 + tau2Theta / 4,
+            I2: I2Accuracy
+        },
+        PLR: {
+            estimate: PLR,
+            ci: [Math.exp(logPLR - STAT_CONSTANTS.Z_95 * logPLRSE),
+                 Math.exp(logPLR + STAT_CONSTANTS.Z_95 * logPLRSE)]
+        },
+        NLR: {
+            estimate: NLR,
+            ci: [Math.exp(logNLR - STAT_CONSTANTS.Z_95 * logNLRSE),
+                 Math.exp(logNLR + STAT_CONSTANTS.Z_95 * logNLRSE)]
+        },
+        DOR: {
+            estimate: DOR,
+            ci: [Math.exp(Lambda - STAT_CONSTANTS.Z_95 * dRE.se),
+                 Math.exp(Lambda + STAT_CONSTANTS.Z_95 * dRE.se)]
+        },
+        // HSROC-specific parameters
+        hsroc: {
+            Lambda: Lambda,           // Overall accuracy (log-DOR)
+            LambdaSE: dRE.se,
+            Theta: Theta,             // Threshold parameter
+            ThetaSE: sRE.se,
+            beta: beta,               // Asymmetry parameter
+            tau2Lambda: tau2Lambda,   // Between-study variance in accuracy
+            tau2Theta: tau2Theta      // Between-study variance in threshold
+        },
+        correlation: -beta / (1 + Math.abs(beta)), // Approximate correlation
+        k,
+        modelType: 'hsroc'
+    };
+}
+
+/**
+ * Simple univariate random effects model for DTA
+ * Analyzes sensitivity and specificity separately (ignores correlation)
+ * Useful when bivariate model fails or for quick analysis
+ * @param {Object[]} studyStats - Array of study statistics from calcStudyStats
+ * @returns {Object|null} Model results or null if insufficient data
+ */
+function univariateModel(studyStats) {
+    const k = studyStats.length;
+    if (k < STAT_CONSTANTS.MIN_STUDIES_UNIVARIATE) return null;
+
+    // Extract values
+    const sensLogits = studyStats.map(s => s.sensLogit);
+    const specLogits = studyStats.map(s => s.specLogit);
+    const varSens = studyStats.map(s => s.varSensLogit);
+    const varSpec = studyStats.map(s => s.varSpecLogit);
+
+    // Separate univariate analyses
+    const sensRE = univariateRE(sensLogits, varSens);
+    const specRE = univariateRE(specLogits, varSpec);
+
+    if (!sensRE || !specRE) return null;
+
+    // Transform to probability scale
+    const pooledSens = invLogit(sensRE.estimate);
+    const pooledSpec = invLogit(specRE.estimate);
+
+    const sensLower = invLogit(sensRE.ci[0]);
+    const sensUpper = invLogit(sensRE.ci[1]);
+    const specLower = invLogit(specRE.ci[0]);
+    const specUpper = invLogit(specRE.ci[1]);
+
+    // Likelihood ratios
+    const oneMinusSpec = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, 1 - pooledSpec);
+    const oneMinusSens = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, 1 - pooledSens);
+    const safeSpec = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, pooledSpec);
+    const safeSens = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, pooledSens);
+
+    const PLR = safeSens / oneMinusSpec;
+    const NLR = oneMinusSens / safeSpec;
+    const DOR = PLR / NLR;
+
+    // CIs for likelihood ratios (assuming independence)
+    const logPLR = Math.log(PLR);
+    const logNLR = Math.log(NLR);
+    const logPLRSE = safeSqrt(Math.pow(sensRE.se / safeSens, 2) + Math.pow(specRE.se / oneMinusSpec, 2));
+    const logNLRSE = safeSqrt(Math.pow(sensRE.se / oneMinusSens, 2) + Math.pow(specRE.se / safeSpec, 2));
+    const logDOR = Math.log(DOR);
+    const logDORSE = safeSqrt(logPLRSE * logPLRSE + logNLRSE * logNLRSE);
+
+    return {
+        sensitivity: {
+            estimate: pooledSens,
+            ci: [sensLower, sensUpper],
+            se: sensRE.se,
+            logit: sensRE.estimate,
+            tau2: sensRE.tau2,
+            I2: sensRE.I2,
+            Q: sensRE.Q,
+            pQ: sensRE.pQ
+        },
+        specificity: {
+            estimate: pooledSpec,
+            ci: [specLower, specUpper],
+            se: specRE.se,
+            logit: specRE.estimate,
+            tau2: specRE.tau2,
+            I2: specRE.I2,
+            Q: specRE.Q,
+            pQ: specRE.pQ
+        },
+        PLR: {
+            estimate: PLR,
+            ci: [Math.exp(logPLR - STAT_CONSTANTS.Z_95 * logPLRSE),
+                 Math.exp(logPLR + STAT_CONSTANTS.Z_95 * logPLRSE)]
+        },
+        NLR: {
+            estimate: NLR,
+            ci: [Math.exp(logNLR - STAT_CONSTANTS.Z_95 * logNLRSE),
+                 Math.exp(logNLR + STAT_CONSTANTS.Z_95 * logNLRSE)]
+        },
+        DOR: {
+            estimate: DOR,
+            ci: [Math.exp(logDOR - STAT_CONSTANTS.Z_95 * logDORSE),
+                 Math.exp(logDOR + STAT_CONSTANTS.Z_95 * logDORSE)]
+        },
+        correlation: null, // Not estimated in univariate model
+        k,
+        modelType: 'univariate'
     };
 }
 
@@ -1828,89 +2308,172 @@ function deeksFunnelTest(studyStats) {
 // ========================
 // MAIN ANALYSIS
 // ========================
+
+/**
+ * Get the minimum number of studies required for the selected model
+ * @param {string} modelType - Model type identifier
+ * @returns {number} Minimum number of studies
+ */
+function getMinStudiesForModel(modelType) {
+    switch (modelType) {
+        case 'bivariate':
+        case 'hsroc':
+            return STAT_CONSTANTS.MIN_STUDIES_BIVARIATE;
+        case 'univariate':
+            return STAT_CONSTANTS.MIN_STUDIES_UNIVARIATE;
+        default:
+            return STAT_CONSTANTS.MIN_STUDIES_BIVARIATE;
+    }
+}
+
+/**
+ * Run the selected model on study statistics
+ * @param {string} modelType - Model type ('bivariate', 'hsroc', 'univariate')
+ * @param {Object[]} studyStats - Array of study statistics
+ * @returns {Object|null} Model results or null on failure
+ */
+function runSelectedModel(modelType, studyStats) {
+    switch (modelType) {
+        case 'bivariate':
+            return bivariateModel(studyStats);
+        case 'hsroc':
+            return hsrocModel(studyStats);
+        case 'univariate':
+            return univariateModel(studyStats);
+        default:
+            return bivariateModel(studyStats);
+    }
+}
+
+/**
+ * Main analysis function - orchestrates the DTA meta-analysis
+ * Includes error handling and model selection
+ */
 function runAnalysis() {
-    const validStudies = studies.filter(s => 
-        s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '' &&
-        s.tp >= 0 && s.fp >= 0 && s.fn >= 0 && s.tn >= 0
-    );
-    
-    if (validStudies.length < 2) {
-        showToast('Need at least 2 valid studies to run analysis', 'error');
-        return;
+    try {
+        // Get selected model type
+        const modelSelect = document.getElementById('modelSelect');
+        currentModel = modelSelect ? modelSelect.value : 'bivariate';
+
+        // Filter valid studies
+        const validStudies = studies.filter(s =>
+            s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '' &&
+            s.tp >= 0 && s.fp >= 0 && s.fn >= 0 && s.tn >= 0
+        );
+
+        const minStudies = getMinStudiesForModel(currentModel);
+        if (validStudies.length < minStudies) {
+            showToast(`Need at least ${minStudies} valid studies for ${currentModel} model`, 'error');
+            return;
+        }
+
+        // Calculate study-level statistics
+        const studyStats = validStudies.map(s => ({
+            ...calcStudyStats(s),
+            name: s.name,
+            quadas: s.quadas
+        }));
+
+        // Run selected model
+        let model = runSelectedModel(currentModel, studyStats);
+
+        // Fallback to univariate if primary model fails
+        if (!model && currentModel !== 'univariate') {
+            showToast(`${currentModel} model failed, falling back to univariate`, 'warning');
+            model = univariateModel(studyStats);
+            if (model) model.modelType = 'univariate (fallback)';
+        }
+
+        if (!model) {
+            showToast('Error: Could not run any model on this data', 'error');
+            return;
+        }
+
+        // SROC curve
+        const sroc = calcSROC(studyStats);
+
+        // Threshold effect test
+        const threshold = thresholdEffectTest(studyStats);
+
+        // Deeks' funnel test for publication bias
+        const deeks = deeksFunnelTest(studyStats);
+
+        // Store results globally
+        results = {
+            model,
+            sroc,
+            threshold,
+            deeks,
+            studyStats,
+            k: validStudies.length,
+            modelType: model.modelType || currentModel
+        };
+
+        // Update all views
+        updateSummaryView();
+        updateAllPlots();
+        updateHeterogeneityView();
+        updateNomogram();
+        generateRCode();
+
+        const modelLabel = model.modelType || currentModel;
+        showToast(`Analysis complete: ${validStudies.length} studies (${modelLabel} model)`);
+
+    } catch (error) {
+        console.error('Analysis error:', error);
+        showToast('Analysis failed: ' + (error.message || 'Unknown error'), 'error');
     }
-    
-    // Calculate study-level statistics
-    const studyStats = validStudies.map(s => ({
-        ...calcStudyStats(s),
-        name: s.name,
-        quadas: s.quadas
-    }));
-    
-    // Run bivariate model
-    const model = bivariateModel(studyStats);
-    if (!model) {
-        showToast('Error running bivariate model', 'error');
-        return;
-    }
-    
-    // SROC curve
-    const sroc = calcSROC(studyStats);
-    
-    // Threshold effect
-    const threshold = thresholdEffectTest(studyStats);
-    
-    // Deeks' test
-    const deeks = deeksFunnelTest(studyStats);
-    
-    results = {
-        model,
-        sroc,
-        threshold,
-        deeks,
-        studyStats,
-        k: validStudies.length
-    };
-    
-    updateSummaryView();
-    updateAllPlots();
-    updateHeterogeneityView();
-    updateNomogram();
-    generateRCode();
-    
-    showToast(`Analysis complete: ${validStudies.length} studies analyzed`);
 }
 
 // ========================
 // UPDATE VIEWS
 // ========================
+
+/**
+ * Get human-readable model name for display
+ * @param {string} modelType - Model type identifier
+ * @returns {string} Display name
+ */
+function getModelDisplayName(modelType) {
+    const names = {
+        'bivariate': 'Bivariate (Reitsma)',
+        'hsroc': 'HSROC (Rutter-Gatsonis)',
+        'univariate': 'Univariate RE',
+        'univariate (fallback)': 'Univariate RE (fallback)'
+    };
+    return names[modelType] || modelType;
+}
+
+/**
+ * Update the summary statistics view with model results
+ */
 function updateSummaryView() {
     if (!results) return;
     const m = results.model;
-    
-    // Update method badge
-    const methodSelect = document.getElementById('modelSelect');
+
+    // Update method badge with actual model used
     const methodBadge = document.getElementById('methodBadge');
-    methodBadge.textContent = methodSelect.options[methodSelect.selectedIndex].text;
-    
+    const actualModel = m.modelType || results.modelType || 'bivariate';
+    methodBadge.textContent = getModelDisplayName(actualModel);
+
     // Summary statistics
     document.getElementById('sumSens').textContent = (m.sensitivity.estimate * 100).toFixed(1) + '%';
     document.getElementById('sumSensCI').textContent = `(${(m.sensitivity.ci[0] * 100).toFixed(1)}–${(m.sensitivity.ci[1] * 100).toFixed(1)}%)`;
-    
+
     document.getElementById('sumSpec').textContent = (m.specificity.estimate * 100).toFixed(1) + '%';
     document.getElementById('sumSpecCI').textContent = `(${(m.specificity.ci[0] * 100).toFixed(1)}–${(m.specificity.ci[1] * 100).toFixed(1)}%)`;
-    
+
     document.getElementById('sumPLR').textContent = m.PLR.estimate.toFixed(2);
     document.getElementById('sumPLRCI').textContent = `(${m.PLR.ci[0].toFixed(2)}–${m.PLR.ci[1].toFixed(2)})`;
-    
+
     document.getElementById('sumNLR').textContent = m.NLR.estimate.toFixed(2);
     document.getElementById('sumNLRCI').textContent = `(${m.NLR.ci[0].toFixed(2)}–${m.NLR.ci[1].toFixed(2)})`;
-    
+
     document.getElementById('sumDOR').textContent = m.DOR.estimate.toFixed(1);
     document.getElementById('sumDORCI').textContent = `(${m.DOR.ci[0].toFixed(1)}–${m.DOR.ci[1].toFixed(1)})`;
-    
-    // Detailed results table
-    const resultsBody = document.getElementById('resultsBody');
-    resultsBody.innerHTML = `
+
+    // Build detailed results table
+    let tableHtml = `
         <tr>
             <td class="measure">Sensitivity</td>
             <td>${(m.sensitivity.estimate * 100).toFixed(2)}%</td>
@@ -1947,14 +2510,56 @@ function updateSummaryView() {
             <td>—</td>
         </tr>
     `;
-    
+
+    // Add HSROC-specific parameters if applicable
+    if (m.hsroc) {
+        tableHtml += `
+        <tr style="background: var(--bg-elevated);">
+            <td colspan="5" style="font-weight: 600; padding-top: 1rem;">HSROC Parameters</td>
+        </tr>
+        <tr>
+            <td class="measure">Lambda (Accuracy)</td>
+            <td>${m.hsroc.Lambda.toFixed(3)}</td>
+            <td>${(m.hsroc.Lambda - STAT_CONSTANTS.Z_95 * m.hsroc.LambdaSE).toFixed(3)}</td>
+            <td>${(m.hsroc.Lambda + STAT_CONSTANTS.Z_95 * m.hsroc.LambdaSE).toFixed(3)}</td>
+            <td>${m.hsroc.LambdaSE.toFixed(4)}</td>
+        </tr>
+        <tr>
+            <td class="measure">Theta (Threshold)</td>
+            <td>${m.hsroc.Theta.toFixed(3)}</td>
+            <td>${(m.hsroc.Theta - STAT_CONSTANTS.Z_95 * m.hsroc.ThetaSE).toFixed(3)}</td>
+            <td>${(m.hsroc.Theta + STAT_CONSTANTS.Z_95 * m.hsroc.ThetaSE).toFixed(3)}</td>
+            <td>${m.hsroc.ThetaSE.toFixed(4)}</td>
+        </tr>
+        <tr>
+            <td class="measure">Beta (Asymmetry)</td>
+            <td>${m.hsroc.beta.toFixed(3)}</td>
+            <td colspan="2">—</td>
+            <td>—</td>
+        </tr>
+        <tr>
+            <td class="measure">τ² (Accuracy)</td>
+            <td>${m.hsroc.tau2Lambda.toFixed(4)}</td>
+            <td colspan="3">Between-study variance in log-DOR</td>
+        </tr>
+        <tr>
+            <td class="measure">τ² (Threshold)</td>
+            <td>${m.hsroc.tau2Theta.toFixed(4)}</td>
+            <td colspan="3">Between-study variance in threshold</td>
+        </tr>
+        `;
+    }
+
+    const resultsBody = document.getElementById('resultsBody');
+    resultsBody.innerHTML = tableHtml;
+
     // Clinical interpretation
     let interp = '';
     const sens = m.sensitivity.estimate;
     const spec = m.specificity.estimate;
     const plr = m.PLR.estimate;
     const nlr = m.NLR.estimate;
-    
+
     if (sens >= 0.9 && spec >= 0.9) {
         interp = 'This test demonstrates excellent diagnostic accuracy with both high sensitivity and specificity. It is suitable for both screening and confirmatory purposes.';
     } else if (sens >= 0.9) {
@@ -1964,19 +2569,26 @@ function updateSummaryView() {
     } else {
         interp = 'This test has moderate diagnostic accuracy. Consider using it in combination with other tests or clinical findings.';
     }
-    
+
     if (plr > 10) {
         interp += ` The positive likelihood ratio of ${plr.toFixed(1)} indicates that a positive result provides strong evidence for the presence of disease.`;
     } else if (plr > 5) {
         interp += ` The positive likelihood ratio of ${plr.toFixed(1)} indicates moderate evidence for disease when positive.`;
     }
-    
+
     if (nlr < 0.1) {
         interp += ` The negative likelihood ratio of ${nlr.toFixed(2)} provides strong evidence against disease when the test is negative.`;
     } else if (nlr < 0.2) {
         interp += ` The negative likelihood ratio of ${nlr.toFixed(2)} provides moderate evidence against disease when negative.`;
     }
-    
+
+    // Add model-specific notes
+    if (actualModel === 'hsroc') {
+        interp += ' (Analysis performed using HSROC model which accounts for threshold variation across studies.)';
+    } else if (actualModel === 'univariate' || actualModel === 'univariate (fallback)') {
+        interp += ' (Note: Univariate analysis does not account for correlation between sensitivity and specificity.)';
+    }
+
     document.getElementById('interpretationText').textContent = interp;
 }
 
@@ -2609,9 +3221,10 @@ function renderQUADASGrid() {
     studies.forEach(study => {
         const q = study.quadas;
         const overall = getOverallRoB(q);
-        
+        const escapedName = escapeHtml(study.name);
+
         html += `
-            <div class="quadas-cell quadas-study">${study.name}</div>
+            <div class="quadas-cell quadas-study">${escapedName}</div>
             <div class="quadas-cell">
                 <select class="rob-select" onchange="updateQUADAS(${study.id}, 'patient', this.value)">
                     <option value="low" ${q.patient === 'low' ? 'selected' : ''}>Low</option>
@@ -3030,21 +3643,24 @@ function copyRCode() {
     });
 }
 
+/**
+ * Export study data as CSV file
+ */
 function exportCSV() {
     const validStudies = studies.filter(s => s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '');
-    
+
     if (validStudies.length === 0) {
         showToast('No valid data to export', 'error');
         return;
     }
-    
+
     let csv = 'Study,TP,FP,FN,TN,Sensitivity,Specificity,DOR\n';
-    
+
     validStudies.forEach(s => {
         const stats = calcStudyStats(s);
-        csv += `"${s.name}",${s.tp},${s.fp},${s.fn},${s.tn},${stats.sens.toFixed(4)},${stats.spec.toFixed(4)},${stats.dor.toFixed(2)}\n`;
+        csv += `${escapeCSV(s.name)},${s.tp},${s.fp},${s.fn},${s.tn},${stats.sens.toFixed(4)},${stats.spec.toFixed(4)},${stats.dor.toFixed(2)}\n`;
     });
-    
+
     downloadFile(csv, 'dta_data.csv', 'text/csv');
     showToast('Data exported as CSV');
 }
@@ -3090,52 +3706,87 @@ function exportResults() {
     showToast('Results exported as JSON');
 }
 
+/**
+ * Generate and download a plain text analysis report
+ */
 function generateReport() {
     if (!results) {
         showToast('Run analysis first', 'error');
         return;
     }
-    
+
     const m = results.model;
-    
+    const modelName = getModelDisplayName(m.modelType || results.modelType || 'bivariate');
+    const correlationStr = m.correlation !== null ? m.correlation.toFixed(3) : 'N/A (univariate model)';
+
+    // Build individual study data section
+    const studyDataLines = results.studyStats.map(s =>
+        `  ${s.name}: Sens=${(s.sens*100).toFixed(1)}%, Spec=${(s.spec*100).toFixed(1)}%, N=${s.total}`
+    ).join('\n');
+
     const report = `
-
-DTA META-ANALYSIS REPORT
+================================================================================
+                        DTA META-ANALYSIS REPORT
+================================================================================
 Generated: ${new Date().toLocaleString()}
+Model: ${modelName}
 
-SUMMARY ESTIMATES
-Studies included: ${results.k}
+--------------------------------------------------------------------------------
+SUMMARY ESTIMATES (${results.k} studies)
+--------------------------------------------------------------------------------
+Sensitivity: ${(m.sensitivity.estimate * 100).toFixed(1)}% (95% CI: ${(m.sensitivity.ci[0] * 100).toFixed(1)}–${(m.sensitivity.ci[1] * 100).toFixed(1)}%)
+Specificity: ${(m.specificity.estimate * 100).toFixed(1)}% (95% CI: ${(m.specificity.ci[0] * 100).toFixed(1)}–${(m.specificity.ci[1] * 100).toFixed(1)}%)
 
-Sensitivity: ${(m.sensitivity.estimate * 100).toFixed(1)}% (95% CI: ${(m.sensitivity.ci[0] * 100).toFixed(1)}–${(m.sensitivity.ci[1] * 100).toFixed(1)}%) Specificity: ${(m.specificity.estimate * 100).toFixed(1)}% (95% CI: ${(m.specificity.ci[0] * 100).toFixed(1)}–${(m.specificity.ci[1] * 100).toFixed(1)}%)
+Positive Likelihood Ratio (LR+): ${m.PLR.estimate.toFixed(2)} (95% CI: ${m.PLR.ci[0].toFixed(2)}–${m.PLR.ci[1].toFixed(2)})
+Negative Likelihood Ratio (LR−): ${m.NLR.estimate.toFixed(2)} (95% CI: ${m.NLR.ci[0].toFixed(2)}–${m.NLR.ci[1].toFixed(2)})
+Diagnostic Odds Ratio (DOR): ${m.DOR.estimate.toFixed(1)} (95% CI: ${m.DOR.ci[0].toFixed(1)}–${m.DOR.ci[1].toFixed(1)})
 
-Positive Likelihood Ratio (LR+): ${m.PLR.estimate.toFixed(2)} (95% CI: ${m.PLR.ci[0].toFixed(2)}–${m.PLR.ci[1].toFixed(2)}) Negative Likelihood Ratio (LR−): ${m.NLR.estimate.toFixed(2)} (95% CI: ${m.NLR.ci[0].toFixed(2)}–${m.NLR.ci[1].toFixed(2)}) Diagnostic Odds Ratio (DOR): ${m.DOR.estimate.toFixed(1)} (95% CI: ${m.DOR.ci[0].toFixed(1)}–${m.DOR.ci[1].toFixed(1)})
-
+--------------------------------------------------------------------------------
 HETEROGENEITY
-I² Sensitivity: ${m.sensitivity.I2.toFixed(1)}% I² Specificity: ${m.specificity.I2.toFixed(1)}% Between-study correlation: ${m.correlation.toFixed(3)}
+--------------------------------------------------------------------------------
+I² Sensitivity: ${m.sensitivity.I2.toFixed(1)}%
+I² Specificity: ${m.specificity.I2.toFixed(1)}%
+Between-study correlation: ${correlationStr}
 
-Threshold Effect Test: Spearman ρ: ${results.threshold.rho?.toFixed(3) || 'N/A'} P-value: ${results.threshold.p < 0.001 ? '<0.001' : results.threshold.p?.toFixed(3) || 'N/A'}
+Threshold Effect Test:
+  Spearman ρ: ${results.threshold.rho?.toFixed(3) || 'N/A'}
+  P-value: ${results.threshold.p < 0.001 ? '<0.001' : results.threshold.p?.toFixed(3) || 'N/A'}
 
+--------------------------------------------------------------------------------
 SROC CURVE
-AUC: ${results.sroc?.auc.toFixed(3) || 'N/A'} Q* Index: ${results.sroc?.qStar ? (results.sroc.qStar * 100).toFixed(1) + '%' : 'N/A'}
+--------------------------------------------------------------------------------
+AUC: ${results.sroc?.auc.toFixed(3) || 'N/A'}
+Q* Index: ${results.sroc?.qStar ? (results.sroc.qStar * 100).toFixed(1) + '%' : 'N/A'}
 
+--------------------------------------------------------------------------------
 PUBLICATION BIAS (Deeks' Test)
-Regression slope: ${results.deeks.slope?.toFixed(3) || 'N/A'} P-value: ${results.deeks.p < 0.001 ? '<0.001' : results.deeks.p?.toFixed(3) || 'N/A'} Conclusion: ${results.deeks.p < 0.1 ? 'Evidence of publication bias' : 'No significant asymmetry'}
+--------------------------------------------------------------------------------
+Regression slope: ${results.deeks.slope?.toFixed(3) || 'N/A'}
+P-value: ${results.deeks.p < 0.001 ? '<0.001' : results.deeks.p?.toFixed(3) || 'N/A'}
+Conclusion: ${results.deeks.p < 0.1 ? 'Evidence of publication bias' : 'No significant asymmetry'}
 
+--------------------------------------------------------------------------------
 INDIVIDUAL STUDY DATA
-${results.studyStats.map(s => ${s.name}: Sens=${(s.sens*100).toFixed(1)}%, Spec=${(s.spec*100).toFixed(1)}%, N=${s.total} ).join('\n')} `;
+--------------------------------------------------------------------------------
+${studyDataLines}
+================================================================================
+`;
 
     downloadFile(report, 'dta_report.txt', 'text/plain');
     showToast('Report generated');
 }
 
+/**
+ * Export QUADAS-2 risk of bias assessments as CSV
+ */
 function exportQUADAS() {
     let csv = 'Study,Patient Selection,Index Test,Reference Standard,Flow & Timing,Overall\n';
-    
+
     studies.forEach(s => {
         const overall = getOverallRoB(s.quadas);
-        csv += `"${s.name}",${s.quadas.patient},${s.quadas.index},${s.quadas.reference},${s.quadas.flow},${overall}\n`;
+        csv += `${escapeCSV(s.name)},${s.quadas.patient},${s.quadas.index},${s.quadas.reference},${s.quadas.flow},${overall}\n`;
     });
-    
+
     downloadFile(csv, 'quadas2_assessment.csv', 'text/csv');
     showToast('QUADAS-2 data exported');
 }

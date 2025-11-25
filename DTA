@@ -1,0 +1,3212 @@
+!DOCTYPE html>
+
+<html lang="en"> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>DTA Meta-Analysis Suite — Diagnostic Test Accuracy Analysis</title> <meta name="description" content="Comprehensive diagnostic test accuracy meta-analysis with bivariate modeling, SROC curves, QUADAS-2, Fagan nomogram, and Deeks' funnel plot"> <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script> <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"> <style> :root { --bg-base: #fafaf9; --bg-paper: #ffffff; --bg-elevated: #f5f5f4; --bg-sunken: #e7e5e4; --bg-dark: #1c1917; --border-light: #e7e5e4; --border-default: #d6d3d1; --border-strong: #a8a29e; --text-primary: #1c1917; --text-secondary: #57534e; --text-tertiary: #78716c; --text-inverse: #fafaf9; --accent-primary: #0369a1; --accent-primary-light: #e0f2fe; --accent-secondary: #7c3aed; --accent-secondary-light: #ede9fe; --sensitivity: #0891b2; --sensitivity-light: #cffafe; --specificity: #be185d; --specificity-light: #fce7f3; --success: #059669; --success-light: #d1fae5; --warning: #d97706; --warning-light: #fef3c7; --danger: #dc2626; --danger-light: #fee2e2; --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --shadow-xs: 0 1px 2px rgba(0,0,0,0.04); --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04); --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.06), 0 2px 4px -1px rgba(0,0,0,0.04); --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.06), 0 4px 6px -2px rgba(0,0,0,0.03); --shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.08), 0 10px 10px -5px rgba(0,0,0,0.02); --font-serif: 'Crimson Pro', Georgia, serif; --font-sans: 'DM Sans', -apple-system, sans-serif; --font-mono: 'IBM Plex Mono', monospace; --transition-fast: 120ms ease; --transition-normal: 200ms ease; --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1); }
+    [data-theme="dark"] {
+        --bg-base: #0c0a09;
+        --bg-paper: #1c1917;
+        --bg-elevated: #292524;
+        --bg-sunken: #0c0a09;
+        --border-light: #292524;
+        --border-default: #3f3f46;
+        --border-strong: #57534e;
+        --text-primary: #fafaf9;
+        --text-secondary: #a8a29e;
+        --text-tertiary: #78716c;
+        --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+        --shadow-md: 0 4px 6px rgba(0,0,0,0.4);
+        --shadow-lg: 0 10px 15px rgba(0,0,0,0.5);
+    }
+    
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    html { font-size: 16px; scroll-behavior: smooth; }
+    
+    body {
+        font-family: var(--font-sans);
+        background: var(--bg-base);
+        color: var(--text-primary);
+        min-height: 100vh;
+        line-height: 1.6;
+    }
+    
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: var(--bg-elevated); }
+    ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+    
+    /* Header */
+    .masthead {
+        background: var(--bg-paper);
+        border-bottom: 1px solid var(--border-default);
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+    
+    .masthead-inner {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 1rem 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .brand {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .brand-logo {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        border-radius: var(--radius-lg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-family: var(--font-mono);
+        font-weight: 700;
+        font-size: 0.875rem;
+        letter-spacing: -0.5px;
+    }
+    
+    .brand-info h1 {
+        font-family: var(--font-serif);
+        font-size: 1.375rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+    }
+    
+    .brand-info p {
+        font-size: 0.75rem;
+        color: var(--text-tertiary);
+        font-weight: 500;
+    }
+    
+    .masthead-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .control-pill {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-light);
+        border-radius: 100px;
+        padding: 0.375rem 0.875rem;
+        font-size: 0.8125rem;
+    }
+    
+    .control-pill label {
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-tertiary);
+    }
+    
+    .control-pill select {
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        cursor: pointer;
+        padding-right: 0.5rem;
+    }
+    
+    .control-pill select:focus { outline: none; }
+    
+    .theme-toggle {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-light);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-secondary);
+        transition: all var(--transition-fast);
+    }
+    
+    .theme-toggle:hover {
+        background: var(--bg-sunken);
+        color: var(--text-primary);
+    }
+    
+    /* Navigation */
+    .nav-bar {
+        background: var(--bg-paper);
+        border-bottom: 1px solid var(--border-light);
+    }
+    
+    .nav-inner {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 0 2rem;
+        display: flex;
+        gap: 0.25rem;
+        overflow-x: auto;
+    }
+    
+    .nav-tab {
+        padding: 0.875rem 1.25rem;
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        color: var(--text-tertiary);
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all var(--transition-fast);
+    }
+    
+    .nav-tab:hover {
+        color: var(--text-secondary);
+    }
+    
+    .nav-tab.active {
+        color: var(--accent-primary);
+        border-bottom-color: var(--accent-primary);
+    }
+    
+    /* Main Content */
+    .main-content {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+    
+    .view { display: none; animation: fadeIn 0.3s ease; }
+    .view.active { display: block; }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* Cards */
+    .card {
+        background: var(--bg-paper);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-sm);
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+    }
+    
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid var(--border-light);
+        background: var(--bg-elevated);
+    }
+    
+    .card-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-family: var(--font-serif);
+        font-size: 1.0625rem;
+        font-weight: 600;
+    }
+    
+    .card-title svg {
+        color: var(--accent-primary);
+    }
+    
+    .card-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .card-body {
+        padding: 1.5rem;
+    }
+    
+    /* Buttons */
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--text-primary);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+    
+    .btn:hover {
+        background: var(--bg-sunken);
+        border-color: var(--border-strong);
+    }
+    
+    .btn-primary {
+        background: var(--accent-primary);
+        border-color: var(--accent-primary);
+        color: white;
+    }
+    
+    .btn-primary:hover {
+        background: #0284c7;
+        border-color: #0284c7;
+    }
+    
+    .btn-sm {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.75rem;
+    }
+    
+    .btn svg { width: 16px; height: 16px; }
+    
+    /* Grid Layouts */
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; }
+    
+    @media (max-width: 1200px) {
+        .grid-4, .grid-5 { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+        .grid-2, .grid-3, .grid-4, .grid-5 { grid-template-columns: 1fr; }
+        .masthead-inner { flex-direction: column; gap: 1rem; }
+    }
+    
+    /* Stats */
+    .stat-card {
+        background: var(--bg-paper);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-lg);
+        padding: 1.25rem;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+    }
+    
+    .stat-value {
+        font-family: var(--font-mono);
+        font-size: 1.75rem;
+        font-weight: 600;
+        color: var(--accent-primary);
+        line-height: 1.2;
+    }
+    
+    .stat-value.sensitivity { color: var(--sensitivity); }
+    .stat-value.specificity { color: var(--specificity); }
+    .stat-value.success { color: var(--success); }
+    .stat-value.warning { color: var(--warning); }
+    .stat-value.danger { color: var(--danger); }
+    
+    .stat-label {
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-tertiary);
+        margin-top: 0.375rem;
+    }
+    
+    .stat-sublabel {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        font-family: var(--font-mono);
+        margin-top: 0.25rem;
+    }
+    
+    /* Tables */
+    .table-wrap { overflow-x: auto; }
+    
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+    }
+    
+    .data-table th,
+    .data-table td {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border-light);
+    }
+    
+    .data-table th {
+        background: var(--bg-elevated);
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-tertiary);
+    }
+    
+    .data-table tbody tr:hover {
+        background: var(--bg-elevated);
+    }
+    
+    .data-table input,
+    .data-table select {
+        width: 100%;
+        min-width: 80px;
+        background: var(--bg-paper);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        padding: 0.5rem 0.625rem;
+        font-size: 0.8125rem;
+        color: var(--text-primary);
+        transition: border-color var(--transition-fast);
+    }
+    
+    .data-table input:focus,
+    .data-table select:focus {
+        outline: none;
+        border-color: var(--accent-primary);
+    }
+    
+    .data-table input[type="number"] {
+        font-family: var(--font-mono);
+    }
+    
+    .delete-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        color: var(--text-tertiary);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+    
+    .delete-btn:hover {
+        background: var(--danger-light);
+        color: var(--danger);
+    }
+    
+    /* League Table for Results */
+    .results-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+    }
+    
+    .results-table th,
+    .results-table td {
+        padding: 0.875rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border-light);
+    }
+    
+    .results-table th {
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+    }
+    
+    .results-table td {
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+    }
+    
+    .results-table .measure {
+        font-family: var(--font-sans);
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+    
+    /* Plots */
+    .plot-container {
+        min-height: 400px;
+        background: var(--bg-base);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-light);
+    }
+    
+    /* QUADAS Styles */
+    .quadas-grid {
+        display: grid;
+        grid-template-columns: 200px repeat(4, 1fr) 2fr;
+        gap: 1px;
+        background: var(--border-light);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+    }
+    
+    .quadas-header {
+        background: var(--bg-elevated);
+        padding: 0.75rem;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        text-align: center;
+        color: var(--text-tertiary);
+    }
+    
+    .quadas-cell {
+        background: var(--bg-paper);
+        padding: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .quadas-study {
+        justify-content: flex-start;
+        font-weight: 500;
+        font-size: 0.875rem;
+    }
+    
+    .rob-select {
+        width: 100%;
+        padding: 0.375rem 0.5rem;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        font-size: 0.75rem;
+        background: var(--bg-paper);
+        cursor: pointer;
+    }
+    
+    .rob-indicator {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: white;
+    }
+    
+    .rob-low { background: var(--success); }
+    .rob-some { background: var(--warning); }
+    .rob-high { background: var(--danger); }
+    .rob-unclear { background: var(--text-tertiary); }
+    
+    /* Fagan Nomogram Styling */
+    .nomogram-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    
+    .nomogram-slider {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .nomogram-slider label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    
+    .nomogram-slider label span {
+        font-family: var(--font-mono);
+        color: var(--accent-primary);
+    }
+    
+    .nomogram-slider input[type="range"] {
+        width: 100%;
+        height: 8px;
+        border-radius: 4px;
+        background: var(--bg-sunken);
+        outline: none;
+        -webkit-appearance: none;
+    }
+    
+    .nomogram-slider input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--accent-primary);
+        cursor: pointer;
+        border: 3px solid white;
+        box-shadow: var(--shadow-md);
+    }
+    
+    .nomogram-result {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .nomogram-value {
+        background: var(--bg-elevated);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        text-align: center;
+    }
+    
+    .nomogram-value .value {
+        font-family: var(--font-mono);
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+    
+    .nomogram-value .value.positive { color: var(--sensitivity); }
+    .nomogram-value .value.negative { color: var(--specificity); }
+    
+    .nomogram-value .label {
+        font-size: 0.6875rem;
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+        margin-top: 0.25rem;
+    }
+    
+    /* Alert */
+    .alert {
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        border-left: 4px solid var(--accent-primary);
+        background: var(--accent-primary-light);
+        margin-bottom: 1rem;
+    }
+    
+    .alert-success { border-color: var(--success); background: var(--success-light); }
+    .alert-warning { border-color: var(--warning); background: var(--warning-light); }
+    .alert-danger { border-color: var(--danger); background: var(--danger-light); }
+    
+    /* Method Badge */
+    .method-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 100px;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        background: var(--accent-secondary-light);
+        color: var(--accent-secondary);
+    }
+    
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        color: var(--text-tertiary);
+    }
+    
+    .empty-state svg {
+        width: 48px;
+        height: 48px;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    
+    /* Study Detail in Forest Plot */
+    .study-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.75rem 1rem;
+        background: var(--bg-elevated);
+        border-radius: var(--radius-md);
+        margin-bottom: 0.5rem;
+    }
+    
+    .study-name {
+        min-width: 150px;
+        font-weight: 500;
+        font-size: 0.875rem;
+    }
+    
+    .study-values {
+        display: flex;
+        gap: 2rem;
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+    }
+    
+    .study-values span {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .study-values .label {
+        font-size: 0.625rem;
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+        font-family: var(--font-sans);
+    }
+    
+    /* Toast Notification */
+    .toast {
+        position: fixed;
+        bottom: 2rem;
+        left: 50%;
+        transform: translateX(-50%) translateY(100px);
+        background: var(--bg-dark);
+        color: var(--text-inverse);
+        padding: 0.875rem 1.5rem;
+        border-radius: 100px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        box-shadow: var(--shadow-xl);
+        opacity: 0;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1000;
+    }
+    
+    .toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+    
+    /* Tab Content Sections */
+    .section-title {
+        font-family: var(--font-serif);
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .section-title svg {
+        color: var(--accent-primary);
+    }
+    
+    /* Interpretation panel */
+    .interpretation {
+        background: linear-gradient(135deg, var(--accent-primary-light), var(--accent-secondary-light));
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        margin-top: 1.5rem;
+    }
+    
+    .interpretation h4 {
+        font-family: var(--font-serif);
+        font-size: 1rem;
+        margin-bottom: 0.75rem;
+        color: var(--text-primary);
+    }
+    
+    .interpretation p {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        line-height: 1.7;
+    }
+    
+    /* CI Bar */
+    .ci-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        height: 24px;
+    }
+    
+    .ci-line {
+        height: 2px;
+        background: var(--text-tertiary);
+        flex: 1;
+        position: relative;
+    }
+    
+    .ci-point {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--accent-primary);
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    
+    /* Summary Statistics Container */
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+    }
+</style>
+
+</head> <body> <!-- Header --> <header class="masthead"> <div class="masthead-inner"> <div class="brand"> <div class="brand-logo">DTA</div> <div class="brand-info"> <h1>DTA Meta-Analysis Suite</h1> <p>Diagnostic Test Accuracy Analysis v2.0</p> </div> </div> <div class="masthead-controls"> <div class="control-pill"> <label>Model</label> <select id="modelSelect"> <option value="bivariate">Bivariate REML</option> <option value="hsroc">HSROC</option> <option value="univariate">Univariate RE</option> </select> </div> <div class="control-pill"> <label>CI</label> <select id="ciSelect"> <option value="0.95">95%</option> <option value="0.90">90%</option> <option value="0.99">99%</option> </select> </div> <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme"> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"> <circle cx="12" cy="12" r="5"/> <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/> </svg> </button> </div> </div> </header>
+<!-- Navigation -->
+<nav class="nav-bar">
+    <div class="nav-inner">
+        <button class="nav-tab active" data-view="data">Data Entry</button>
+        <button class="nav-tab" data-view="summary">Summary Statistics</button>
+        <button class="nav-tab" data-view="forest">Forest Plots</button>
+        <button class="nav-tab" data-view="sroc">SROC Curve</button>
+        <button class="nav-tab" data-view="heterogeneity">Heterogeneity</button>
+        <button class="nav-tab" data-view="quadas">QUADAS-2</button>
+        <button class="nav-tab" data-view="fagan">Fagan Nomogram</button>
+        <button class="nav-tab" data-view="bias">Publication Bias</button>
+        <button class="nav-tab" data-view="export">Export</button>
+    </div>
+</nav>
+
+<!-- Main Content -->
+<main class="main-content">
+    
+    <!-- Data Entry View -->
+    <section id="data" class="view active">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                    Study Data Entry
+                </div>
+                <div class="card-actions">
+                    <button class="btn" onclick="loadExampleData()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Load Example
+                    </button>
+                    <button class="btn" onclick="addStudy()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        Add Study
+                    </button>
+                    <button class="btn btn-primary" onclick="runAnalysis()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        Run Analysis
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="alert">
+                    <strong>Instructions:</strong> Enter the 2×2 contingency table data for each diagnostic accuracy study.
+                    <strong>TP</strong> = True Positives, <strong>FP</strong> = False Positives, 
+                    <strong>FN</strong> = False Negatives, <strong>TN</strong> = True Negatives.
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table" id="dataTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 180px;">Study</th>
+                                <th style="width: 100px;">TP</th>
+                                <th style="width: 100px;">FP</th>
+                                <th style="width: 100px;">FN</th>
+                                <th style="width: 100px;">TN</th>
+                                <th style="width: 140px;">Sensitivity</th>
+                                <th style="width: 140px;">Specificity</th>
+                                <th style="width: 50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid-4">
+            <div class="stat-card">
+                <div class="stat-value" id="statStudies">0</div>
+                <div class="stat-label">Studies</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statPatients">0</div>
+                <div class="stat-label">Total Patients</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statDiseased">0</div>
+                <div class="stat-label">Diseased</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statHealthy">0</div>
+                <div class="stat-label">Non-Diseased</div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Summary Statistics View -->
+    <section id="summary" class="view">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="20" x2="18" y2="10"/>
+                        <line x1="12" y1="20" x2="12" y2="4"/>
+                        <line x1="6" y1="20" x2="6" y2="14"/>
+                    </svg>
+                    Summary Estimates
+                </div>
+                <span class="method-badge" id="methodBadge">Bivariate REML</span>
+            </div>
+            <div class="card-body">
+                <div class="grid-5">
+                    <div class="stat-card">
+                        <div class="stat-value sensitivity" id="sumSens">—</div>
+                        <div class="stat-label">Sensitivity</div>
+                        <div class="stat-sublabel" id="sumSensCI"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value specificity" id="sumSpec">—</div>
+                        <div class="stat-label">Specificity</div>
+                        <div class="stat-sublabel" id="sumSpecCI"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="sumPLR">—</div>
+                        <div class="stat-label">LR+</div>
+                        <div class="stat-sublabel" id="sumPLRCI"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="sumNLR">—</div>
+                        <div class="stat-label">LR−</div>
+                        <div class="stat-sublabel" id="sumNLRCI"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="sumDOR">—</div>
+                        <div class="stat-label">DOR</div>
+                        <div class="stat-sublabel" id="sumDORCI"></div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 2rem;">
+                    <h3 class="section-title">Detailed Results</h3>
+                    <div class="table-wrap">
+                        <table class="results-table" id="resultsTable">
+                            <thead>
+                                <tr>
+                                    <th>Measure</th>
+                                    <th>Estimate</th>
+                                    <th>95% CI Lower</th>
+                                    <th>95% CI Upper</th>
+                                    <th>SE</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resultsBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="interpretation" id="interpretationBox">
+                    <h4>Clinical Interpretation</h4>
+                    <p id="interpretationText">Run analysis to see interpretation.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Forest Plots View -->
+    <section id="forest" class="view">
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="3" y1="9" x2="21" y2="9"/>
+                            <line x1="9" y1="21" x2="9" y2="9"/>
+                        </svg>
+                        Sensitivity Forest Plot
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="plot-container" id="forestSensPlot"></div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="3" y1="9" x2="21" y2="9"/>
+                            <line x1="9" y1="21" x2="9" y2="9"/>
+                        </svg>
+                        Specificity Forest Plot
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="plot-container" id="forestSpecPlot"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    </svg>
+                    Paired Forest Plot
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="plot-container" id="pairedForestPlot" style="min-height: 500px;"></div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- SROC Curve View -->
+    <section id="sroc" class="view">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 3v18h18"/>
+                        <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
+                    </svg>
+                    Summary ROC Curve
+                </div>
+                <div class="card-actions">
+                    <div class="control-pill">
+                        <label>Region</label>
+                        <select id="srocRegion" onchange="updateSROC()">
+                            <option value="confidence">Confidence</option>
+                            <option value="prediction">Prediction</option>
+                            <option value="both">Both</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="plot-container" id="srocPlot" style="min-height: 550px;"></div>
+            </div>
+        </div>
+        
+        <div class="grid-3">
+            <div class="stat-card">
+                <div class="stat-value" id="aucValue">—</div>
+                <div class="stat-label">AUC (SROC)</div>
+                <div class="stat-sublabel" id="aucCI"></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="qstarValue">—</div>
+                <div class="stat-label">Q* Index</div>
+                <div class="stat-sublabel">Sens = Spec point</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="dPrimeValue">—</div>
+                <div class="stat-label">D' (d-prime)</div>
+                <div class="stat-sublabel">Discriminability</div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Heterogeneity View -->
+    <section id="heterogeneity" class="view">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    Heterogeneity Assessment
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="grid-4">
+                    <div class="stat-card">
+                        <div class="stat-value" id="i2Sens">—</div>
+                        <div class="stat-label">I² Sensitivity</div>
+                        <div class="stat-sublabel" id="i2SensLevel"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="i2Spec">—</div>
+                        <div class="stat-label">I² Specificity</div>
+                        <div class="stat-sublabel" id="i2SpecLevel"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="tauSens">—</div>
+                        <div class="stat-label">τ² Sensitivity</div>
+                        <div class="stat-sublabel">Between-study var</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="tauSpec">—</div>
+                        <div class="stat-label">τ² Specificity</div>
+                        <div class="stat-sublabel">Between-study var</div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 2rem;">
+                    <h3 class="section-title">Correlation & Threshold Effect</h3>
+                    <div class="grid-3">
+                        <div class="stat-card">
+                            <div class="stat-value" id="corrValue">—</div>
+                            <div class="stat-label">ρ (Correlation)</div>
+                            <div class="stat-sublabel">Sens-Spec correlation</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="spearmanRho">—</div>
+                            <div class="stat-label">Spearman ρ</div>
+                            <div class="stat-sublabel">Threshold effect</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="thresholdP">—</div>
+                            <div class="stat-label">P-value</div>
+                            <div class="stat-sublabel">Threshold test</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-warning" style="margin-top: 1.5rem;" id="hetAlert">
+                    Heterogeneity assessment will appear after analysis.
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">ROC Space (Threshold Effect Visualization)</div>
+            </div>
+            <div class="card-body">
+                <div class="plot-container" id="rocSpacePlot" style="min-height: 450px;"></div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- QUADAS-2 View -->
+    <section id="quadas" class="view">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    QUADAS-2 Risk of Bias Assessment
+                </div>
+                <div class="card-actions">
+                    <button class="btn btn-sm" onclick="exportQUADAS()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Export
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-wrap">
+                    <div class="quadas-grid" id="quadasGrid">
+                        <div class="quadas-header">Study</div>
+                        <div class="quadas-header">Patient Selection</div>
+                        <div class="quadas-header">Index Test</div>
+                        <div class="quadas-header">Reference Standard</div>
+                        <div class="quadas-header">Flow & Timing</div>
+                        <div class="quadas-header">Overall</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Risk of Bias Summary</div>
+                </div>
+                <div class="card-body">
+                    <div class="plot-container" id="quadasSummaryPlot" style="min-height: 300px;"></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Traffic Light Plot</div>
+                </div>
+                <div class="card-body">
+                    <div class="plot-container" id="quadasTrafficPlot" style="min-height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Fagan Nomogram View -->
+    <section id="fagan" class="view">
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="4" y1="21" x2="4" y2="14"/>
+                            <line x1="4" y1="10" x2="4" y2="3"/>
+                            <line x1="12" y1="21" x2="12" y2="12"/>
+                            <line x1="12" y1="8" x2="12" y2="3"/>
+                            <line x1="20" y1="21" x2="20" y2="16"/>
+                            <line x1="20" y1="12" x2="20" y2="3"/>
+                            <line x1="1" y1="14" x2="7" y2="14"/>
+                            <line x1="9" y1="8" x2="15" y2="8"/>
+                            <line x1="17" y1="16" x2="23" y2="16"/>
+                        </svg>
+                        Fagan Nomogram Calculator
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="nomogram-controls">
+                        <div class="nomogram-slider">
+                            <label>
+                                Pre-test Probability
+                                <span id="pretestValue">25%</span>
+                            </label>
+                            <input type="range" id="pretestSlider" min="1" max="99" value="25" oninput="updateNomogram()">
+                        </div>
+                        
+                        <div class="alert">
+                            <strong>Using pooled likelihood ratios:</strong><br>
+                            LR+ = <span id="faganLRP">—</span> | LR− = <span id="faganLRN">—</span>
+                        </div>
+                        
+                        <div class="nomogram-result">
+                            <div class="nomogram-value">
+                                <div class="value positive" id="postPosValue">—</div>
+                                <div class="label">Post-test Prob (Positive)</div>
+                            </div>
+                            <div class="nomogram-value">
+                                <div class="value negative" id="postNegValue">—</div>
+                                <div class="label">Post-test Prob (Negative)</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="interpretation" style="margin-top: 1.5rem;">
+                        <h4>Clinical Utility Interpretation</h4>
+                        <p id="faganInterpretation">Adjust the pre-test probability to see how the test changes your diagnostic certainty.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Interactive Nomogram</div>
+                </div>
+                <div class="card-body">
+                    <div class="plot-container" id="faganPlot" style="min-height: 500px;"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Publication Bias View -->
+    <section id="bias" class="view">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 20V10"/>
+                        <path d="M18 20V4"/>
+                        <path d="M6 20v-4"/>
+                    </svg>
+                    Deeks' Funnel Plot Asymmetry Test
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="plot-container" id="deeksPlot" style="min-height: 450px;"></div>
+                
+                <div class="grid-3" style="margin-top: 1.5rem;">
+                    <div class="stat-card">
+                        <div class="stat-value" id="deeksSlope">—</div>
+                        <div class="stat-label">Regression Slope</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="deeksP">—</div>
+                        <div class="stat-label">P-value</div>
+                        <div class="stat-sublabel" id="deeksSig"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="deeksConclusion">—</div>
+                        <div class="stat-label">Conclusion</div>
+                    </div>
+                </div>
+                
+                <div class="alert" style="margin-top: 1.5rem;" id="deeksAlert">
+                    <strong>Deeks' Test:</strong> Tests for funnel plot asymmetry as an indicator of publication bias in DTA meta-analyses.
+                    A significant p-value (typically &lt;0.10) suggests possible publication bias.
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Export View -->
+    <section id="export" class="view">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Export Results
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="grid-3">
+                    <button class="btn" onclick="exportCSV()" style="padding: 1.5rem;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        Export Data (CSV)
+                    </button>
+                    <button class="btn" onclick="exportResults()" style="padding: 1.5rem;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                        </svg>
+                        Export Results (JSON)
+                    </button>
+                    <button class="btn" onclick="generateReport()" style="padding: 1.5rem;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="3" y1="9" x2="21" y2="9"/>
+                        </svg>
+                        Generate Report
+                    </button>
+                </div>
+                
+                <div style="margin-top: 2rem;">
+                    <h3 class="section-title">R Code Generation</h3>
+                    <div class="alert">
+                        Generate R code to reproduce this analysis using the <code>mada</code> and <code>metafor</code> packages.
+                    </div>
+                    <pre id="rCodeOutput" style="background: var(--bg-elevated); padding: 1.5rem; border-radius: var(--radius-md); font-family: var(--font-mono); font-size: 0.8125rem; overflow-x: auto; white-space: pre-wrap; margin-top: 1rem; border: 1px solid var(--border-light);">
+
+Run analysis first to generate R code
+                    </pre>
+                    <button class="btn" onclick="copyRCode()" style="margin-top: 1rem;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                        Copy Code
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+</main>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ========================
+// GLOBAL STATE
+// ========================
+let studies = [];
+let results = null;
+let quadasData = {};
+
+// ========================
+// THEME TOGGLE
+// ========================
+function toggleTheme() {
+    const body = document.body;
+    const isDark = body.getAttribute('data-theme') === 'dark';
+    body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    localStorage.setItem('theme', isDark ? 'light' : 'dark');
+    if (results) updateAllPlots();
+}
+
+// Initialize theme
+const savedTheme = localStorage.getItem('theme') || 'light';
+document.body.setAttribute('data-theme', savedTheme);
+
+// ========================
+// NAVIGATION
+// ========================
+document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.view).classList.add('active');
+    });
+});
+
+// ========================
+// DATA MANAGEMENT
+// ========================
+function addStudy(data = {}) {
+    const study = {
+        id: Date.now(),
+        name: data.name || `Study ${studies.length + 1}`,
+        tp: data.tp ?? '',
+        fp: data.fp ?? '',
+        fn: data.fn ?? '',
+        tn: data.tn ?? '',
+        quadas: {
+            patient: 'low',
+            index: 'low',
+            reference: 'low',
+            flow: 'low'
+        }
+    };
+    studies.push(study);
+    renderDataTable();
+    updateQuickStats();
+    return study;
+}
+
+function removeStudy(id) {
+    studies = studies.filter(s => s.id !== id);
+    renderDataTable();
+    updateQuickStats();
+}
+
+function updateStudy(id, field, value) {
+    const study = studies.find(s => s.id === id);
+    if (study) {
+        study[field] = field === 'name' ? value : (value === '' ? '' : parseFloat(value));
+        renderDataTable();
+        updateQuickStats();
+    }
+}
+
+function renderDataTable() {
+    const tbody = document.getElementById('dataBody');
+    tbody.innerHTML = studies.map(study => {
+        const sens = calcSensitivity(study);
+        const spec = calcSpecificity(study);
+        return `
+            <tr>
+                <td><input type="text" value="${study.name}" onchange="updateStudy(${study.id}, 'name', this.value)"></td>
+                <td><input type="number" min="0" value="${study.tp}" onchange="updateStudy(${study.id}, 'tp', this.value)"></td>
+                <td><input type="number" min="0" value="${study.fp}" onchange="updateStudy(${study.id}, 'fp', this.value)"></td>
+                <td><input type="number" min="0" value="${study.fn}" onchange="updateStudy(${study.id}, 'fn', this.value)"></td>
+                <td><input type="number" min="0" value="${study.tn}" onchange="updateStudy(${study.id}, 'tn', this.value)"></td>
+                <td style="font-family: var(--font-mono); color: var(--sensitivity);">${sens !== null ? (sens * 100).toFixed(1) + '%' : '—'}</td>
+                <td style="font-family: var(--font-mono); color: var(--specificity);">${spec !== null ? (spec * 100).toFixed(1) + '%' : '—'}</td>
+                <td><button class="delete-btn" onclick="removeStudy(${study.id})">×</button></td>
+            </tr>
+        `;
+    }).join('');
+    
+    renderQUADASGrid();
+}
+
+function calcSensitivity(study) {
+    if (study.tp === '' || study.fn === '') return null;
+    const denom = study.tp + study.fn;
+    return denom > 0 ? study.tp / denom : null;
+}
+
+function calcSpecificity(study) {
+    if (study.fp === '' || study.tn === '') return null;
+    const denom = study.fp + study.tn;
+    return denom > 0 ? study.tn / denom : null;
+}
+
+function updateQuickStats() {
+    const validStudies = studies.filter(s => s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '');
+    let totalPatients = 0, totalDiseased = 0, totalHealthy = 0;
+    
+    validStudies.forEach(s => {
+        totalPatients += s.tp + s.fp + s.fn + s.tn;
+        totalDiseased += s.tp + s.fn;
+        totalHealthy += s.fp + s.tn;
+    });
+    
+    document.getElementById('statStudies').textContent = validStudies.length;
+    document.getElementById('statPatients').textContent = totalPatients.toLocaleString();
+    document.getElementById('statDiseased').textContent = totalDiseased.toLocaleString();
+    document.getElementById('statHealthy').textContent = totalHealthy.toLocaleString();
+}
+
+// ========================
+// EXAMPLE DATA
+// ========================
+function loadExampleData() {
+    studies = [];
+    const exampleData = [
+        { name: 'Bachmann 2003', tp: 47, fp: 11, fn: 4, tn: 89 },
+        { name: 'Boersma 2005', tp: 53, fp: 27, fn: 8, tn: 163 },
+        { name: 'Bonaca 2010', tp: 205, fp: 132, fn: 18, tn: 468 },
+        { name: 'Christ 2010', tp: 124, fp: 50, fn: 15, tn: 151 },
+        { name: 'Freund 2012', tp: 96, fp: 64, fn: 11, tn: 630 },
+        { name: 'Giannitsis 2010', tp: 159, fp: 111, fn: 13, tn: 323 },
+        { name: 'Haaf 2014', tp: 291, fp: 267, fn: 23, tn: 831 },
+        { name: 'Keller 2009', tp: 78, fp: 91, fn: 5, tn: 308 },
+        { name: 'Kurz 2011', tp: 41, fp: 28, fn: 6, tn: 188 },
+        { name: 'Meune 2011', tp: 64, fp: 67, fn: 5, tn: 185 },
+        { name: 'Reiter 2012', tp: 118, fp: 82, fn: 17, tn: 430 },
+        { name: 'Schreiber 2012', tp: 180, fp: 65, fn: 12, tn: 419 }
+    ];
+    
+    exampleData.forEach(d => addStudy(d));
+    showToast('Loaded 12 example studies (hs-cTnT for AMI diagnosis)');
+}
+
+// ========================
+// STATISTICAL FUNCTIONS
+// ========================
+
+// Logit and inverse logit
+function logit(p) {
+    p = Math.max(0.0001, Math.min(0.9999, p));
+    return Math.log(p / (1 - p));
+}
+
+function invLogit(x) {
+    return 1 / (1 + Math.exp(-x));
+}
+
+// Wilson score interval for single proportion
+function wilsonCI(x, n, z = 1.96) {
+    if (n === 0) return { lower: 0, upper: 1 };
+    const p = x / n;
+    const denom = 1 + z * z / n;
+    const center = p + z * z / (2 * n);
+    const margin = z * Math.sqrt((p * (1 - p) + z * z / (4 * n)) / n);
+    return {
+        lower: Math.max(0, (center - margin) / denom),
+        upper: Math.min(1, (center + margin) / denom)
+    };
+}
+
+// Calculate study-level statistics
+function calcStudyStats(study) {
+    const tp = study.tp, fp = study.fp, fn = study.fn, tn = study.tn;
+    const diseased = tp + fn;
+    const healthy = fp + tn;
+    const total = diseased + healthy;
+    
+    const sens = diseased > 0 ? tp / diseased : 0;
+    const spec = healthy > 0 ? tn / healthy : 0;
+    
+    // Add 0.5 continuity correction for zero cells
+    const tpC = tp + 0.5, fpC = fp + 0.5, fnC = fn + 0.5, tnC = tn + 0.5;
+    const diseasedC = tpC + fnC, healthyC = fpC + tnC;
+    
+    const sensLogit = logit(tpC / diseasedC);
+    const specLogit = logit(tnC / healthyC);
+    
+    // Variance of logit-transformed proportions
+    const varSensLogit = 1 / tpC + 1 / fnC;
+    const varSpecLogit = 1 / tnC + 1 / fpC;
+    
+    // DOR with continuity correction
+    const dor = (tpC * tnC) / (fpC * fnC);
+    const logDOR = Math.log(dor);
+    const varLogDOR = 1/tpC + 1/fpC + 1/fnC + 1/tnC;
+    
+    // Wilson CIs
+    const sensCI = wilsonCI(tp, diseased);
+    const specCI = wilsonCI(tn, healthy);
+    
+    return {
+        sens, spec, sensCI, specCI,
+        sensLogit, specLogit, varSensLogit, varSpecLogit,
+        dor, logDOR, varLogDOR,
+        diseased, healthy, total,
+        tp, fp, fn, tn
+    };
+}
+
+// DerSimonian-Laird random effects for univariate meta-analysis
+function univariateRE(values, variances) {
+    const k = values.length;
+    if (k === 0) return null;
+    
+    // Fixed effect weights and estimate
+    const weights = variances.map(v => 1 / v);
+    const sumW = weights.reduce((a, b) => a + b, 0);
+    const fixedEst = weights.reduce((sum, w, i) => sum + w * values[i], 0) / sumW;
+    
+    // Q statistic
+    const Q = weights.reduce((sum, w, i) => sum + w * Math.pow(values[i] - fixedEst, 2), 0);
+    
+    // DerSimonian-Laird tau-squared
+    const sumW2 = weights.reduce((a, b) => a + b * b, 0);
+    const C = sumW - sumW2 / sumW;
+    let tau2 = Math.max(0, (Q - (k - 1)) / C);
+    
+    // Random effects weights and estimate
+    const reWeights = variances.map(v => 1 / (v + tau2));
+    const sumREW = reWeights.reduce((a, b) => a + b, 0);
+    const reEst = reWeights.reduce((sum, w, i) => sum + w * values[i], 0) / sumREW;
+    const reVar = 1 / sumREW;
+    const reSE = Math.sqrt(reVar);
+    
+    // I-squared
+    const I2 = k > 1 ? Math.max(0, (Q - (k - 1)) / Q * 100) : 0;
+    
+    return {
+        estimate: reEst,
+        se: reSE,
+        ci: [reEst - 1.96 * reSE, reEst + 1.96 * reSE],
+        tau2,
+        Q,
+        I2,
+        k
+    };
+}
+
+// Bivariate random effects model (simplified REML-like estimation)
+function bivariateModel(studyStats) {
+    const k = studyStats.length;
+    if (k < 3) return null;
+    
+    // Extract logit-transformed values
+    const sensLogits = studyStats.map(s => s.sensLogit);
+    const specLogits = studyStats.map(s => s.specLogit);
+    const varSens = studyStats.map(s => s.varSensLogit);
+    const varSpec = studyStats.map(s => s.varSpecLogit);
+    
+    // Univariate estimates first
+    const sensRE = univariateRE(sensLogits, varSens);
+    const specRE = univariateRE(specLogits, varSpec);
+    
+    // Correlation between logit(sens) and logit(spec) across studies
+    const meanSens = sensLogits.reduce((a, b) => a + b, 0) / k;
+    const meanSpec = specLogits.reduce((a, b) => a + b, 0) / k;
+    
+    let sumProd = 0, sumSensSq = 0, sumSpecSq = 0;
+    for (let i = 0; i < k; i++) {
+        const ds = sensLogits[i] - meanSens;
+        const dc = specLogits[i] - meanSpec;
+        sumProd += ds * dc;
+        sumSensSq += ds * ds;
+        sumSpecSq += dc * dc;
+    }
+    
+    const correlation = sumProd / Math.sqrt(sumSensSq * sumSpecSq);
+    
+    // Transform back to probability scale
+    const pooledSens = invLogit(sensRE.estimate);
+    const pooledSpec = invLogit(specRE.estimate);
+    
+    // CI on probability scale
+    const sensLower = invLogit(sensRE.ci[0]);
+    const sensUpper = invLogit(sensRE.ci[1]);
+    const specLower = invLogit(specRE.ci[0]);
+    const specUpper = invLogit(specRE.ci[1]);
+    
+    // Likelihood ratios
+    const PLR = pooledSens / (1 - pooledSpec);
+    const NLR = (1 - pooledSens) / pooledSpec;
+    
+    // DOR
+    const DOR = PLR / NLR;
+    
+    // Approximate CIs for LRs using delta method
+    const plrSE = PLR * Math.sqrt(Math.pow(sensRE.se, 2) + Math.pow(specRE.se, 2));
+    const nlrSE = NLR * Math.sqrt(Math.pow(sensRE.se, 2) + Math.pow(specRE.se, 2));
+    
+    // Log-scale CIs for LRs
+    const logPLR = Math.log(PLR);
+    const logNLR = Math.log(NLR);
+    const logPLRSE = Math.sqrt(Math.pow(sensRE.se / pooledSens, 2) + Math.pow(specRE.se / (1 - pooledSpec), 2));
+    const logNLRSE = Math.sqrt(Math.pow(sensRE.se / (1 - pooledSens), 2) + Math.pow(specRE.se / pooledSpec, 2));
+    
+    return {
+        sensitivity: {
+            estimate: pooledSens,
+            ci: [sensLower, sensUpper],
+            se: sensRE.se,
+            logit: sensRE.estimate,
+            tau2: sensRE.tau2,
+            I2: sensRE.I2
+        },
+        specificity: {
+            estimate: pooledSpec,
+            ci: [specLower, specUpper],
+            se: specRE.se,
+            logit: specRE.estimate,
+            tau2: specRE.tau2,
+            I2: specRE.I2
+        },
+        PLR: {
+            estimate: PLR,
+            ci: [Math.exp(logPLR - 1.96 * logPLRSE), Math.exp(logPLR + 1.96 * logPLRSE)]
+        },
+        NLR: {
+            estimate: NLR,
+            ci: [Math.exp(logNLR - 1.96 * logNLRSE), Math.exp(logNLR + 1.96 * logNLRSE)]
+        },
+        DOR: {
+            estimate: DOR,
+            ci: [DOR * 0.5, DOR * 2] // Rough approximation
+        },
+        correlation,
+        k
+    };
+}
+
+// SROC curve calculation (Moses-Littenberg approach)
+function calcSROC(studyStats) {
+    const k = studyStats.length;
+    if (k < 2) return null;
+    
+    // D = logit(sens) + logit(spec), S = logit(sens) - logit(spec)
+    const D = studyStats.map(s => s.sensLogit + s.specLogit);
+    const S = studyStats.map(s => s.sensLogit - s.specLogit);
+    
+    // Regression: D on S (or S on D)
+    const meanD = D.reduce((a, b) => a + b, 0) / k;
+    const meanS = S.reduce((a, b) => a + b, 0) / k;
+    
+    let sumSD = 0, sumSS = 0;
+    for (let i = 0; i < k; i++) {
+        sumSD += (S[i] - meanS) * (D[i] - meanD);
+        sumSS += (S[i] - meanS) * (S[i] - meanS);
+    }
+    
+    const beta = sumSS > 0 ? sumSD / sumSS : 0;
+    const alpha = meanD - beta * meanS;
+    
+    // Generate SROC curve points
+    const srocPoints = [];
+    for (let fpr = 0.01; fpr <= 0.99; fpr += 0.01) {
+        const specLogit = logit(1 - fpr);
+        // From the symmetric model: sensLogit = (alpha + (1-beta)*specLogit) / (1+beta)
+        // Simplified: when beta ≈ 0 (symmetric), sensLogit ≈ (alpha/2) + specLogit
+        const sensLogit = (alpha - (1 - beta) * specLogit) / (1 + beta);
+        const sens = invLogit(sensLogit);
+        if (sens > 0 && sens < 1) {
+            srocPoints.push({ fpr, sens });
+        }
+    }
+    
+    // AUC approximation using trapezoidal rule
+    let auc = 0;
+    for (let i = 1; i < srocPoints.length; i++) {
+        const dx = srocPoints[i].fpr - srocPoints[i-1].fpr;
+        const avgSens = (srocPoints[i].sens + srocPoints[i-1].sens) / 2;
+        auc += dx * avgSens;
+    }
+    
+    // Q* index (where sens = spec on SROC)
+    const qStar = invLogit(alpha / 2);
+    
+    // D-prime (discriminability index)
+    const dPrime = alpha / Math.sqrt(2);
+    
+    return {
+        points: srocPoints,
+        alpha,
+        beta,
+        auc: Math.max(0.5, Math.min(1, auc)),
+        qStar,
+        dPrime
+    };
+}
+
+// Threshold effect test (Spearman correlation)
+function thresholdEffectTest(studyStats) {
+    const k = studyStats.length;
+    if (k < 4) return { rho: null, p: null };
+    
+    const sens = studyStats.map(s => s.sens);
+    const spec = studyStats.map(s => s.spec);
+    
+    // Rank the values
+    function rank(arr) {
+        const sorted = arr.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
+        const ranks = new Array(arr.length);
+        sorted.forEach((item, r) => { ranks[item.i] = r + 1; });
+        return ranks;
+    }
+    
+    const rankSens = rank(sens);
+    const rankSpec = rank(spec);
+    
+    // Spearman correlation
+    let sumD2 = 0;
+    for (let i = 0; i < k; i++) {
+        const d = rankSens[i] - rankSpec[i];
+        sumD2 += d * d;
+    }
+    const rho = 1 - (6 * sumD2) / (k * (k * k - 1));
+    
+    // Approximate p-value using t-distribution
+    const t = rho * Math.sqrt((k - 2) / (1 - rho * rho));
+    // Simple approximation for p-value
+    const p = 2 * (1 - normalCDF(Math.abs(t) * Math.sqrt(k / 10)));
+    
+    return { rho, p };
+}
+
+// Normal CDF approximation
+function normalCDF(x) {
+    const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
+    const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+    const sign = x < 0 ? -1 : 1;
+    x = Math.abs(x) / Math.sqrt(2);
+    const t = 1 / (1 + p * x);
+    const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+    return 0.5 * (1 + sign * y);
+}
+
+// Deeks' funnel plot asymmetry test
+function deeksFunnelTest(studyStats) {
+    const k = studyStats.length;
+    if (k < 5) return { slope: null, p: null };
+    
+    // ESS = 4 * (TP+FN) * (FP+TN) / (TP+FP+FN+TN)
+    const ess = studyStats.map(s => 4 * s.diseased * s.healthy / s.total);
+    const invSqrtESS = ess.map(e => 1 / Math.sqrt(e));
+    const logDOR = studyStats.map(s => s.logDOR);
+    
+    // Linear regression: logDOR ~ 1/sqrt(ESS)
+    const meanX = invSqrtESS.reduce((a, b) => a + b, 0) / k;
+    const meanY = logDOR.reduce((a, b) => a + b, 0) / k;
+    
+    let sumXY = 0, sumXX = 0, sumYY = 0;
+    for (let i = 0; i < k; i++) {
+        const dx = invSqrtESS[i] - meanX;
+        const dy = logDOR[i] - meanY;
+        sumXY += dx * dy;
+        sumXX += dx * dx;
+        sumYY += dy * dy;
+    }
+    
+    const slope = sumXY / sumXX;
+    const intercept = meanY - slope * meanX;
+    
+    // R-squared and standard error of slope
+    const ssRes = sumYY - slope * sumXY;
+    const mse = ssRes / (k - 2);
+    const seSlope = Math.sqrt(mse / sumXX);
+    
+    // t-test for slope
+    const t = slope / seSlope;
+    const p = 2 * (1 - normalCDF(Math.abs(t)));
+    
+    return {
+        slope,
+        intercept,
+        p,
+        ess,
+        invSqrtESS,
+        logDOR
+    };
+}
+
+// ========================
+// MAIN ANALYSIS
+// ========================
+function runAnalysis() {
+    const validStudies = studies.filter(s => 
+        s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '' &&
+        s.tp >= 0 && s.fp >= 0 && s.fn >= 0 && s.tn >= 0
+    );
+    
+    if (validStudies.length < 2) {
+        showToast('Need at least 2 valid studies to run analysis', 'error');
+        return;
+    }
+    
+    // Calculate study-level statistics
+    const studyStats = validStudies.map(s => ({
+        ...calcStudyStats(s),
+        name: s.name,
+        quadas: s.quadas
+    }));
+    
+    // Run bivariate model
+    const model = bivariateModel(studyStats);
+    if (!model) {
+        showToast('Error running bivariate model', 'error');
+        return;
+    }
+    
+    // SROC curve
+    const sroc = calcSROC(studyStats);
+    
+    // Threshold effect
+    const threshold = thresholdEffectTest(studyStats);
+    
+    // Deeks' test
+    const deeks = deeksFunnelTest(studyStats);
+    
+    results = {
+        model,
+        sroc,
+        threshold,
+        deeks,
+        studyStats,
+        k: validStudies.length
+    };
+    
+    updateSummaryView();
+    updateAllPlots();
+    updateHeterogeneityView();
+    updateNomogram();
+    generateRCode();
+    
+    showToast(`Analysis complete: ${validStudies.length} studies analyzed`);
+}
+
+// ========================
+// UPDATE VIEWS
+// ========================
+function updateSummaryView() {
+    if (!results) return;
+    const m = results.model;
+    
+    // Update method badge
+    const methodSelect = document.getElementById('modelSelect');
+    const methodBadge = document.getElementById('methodBadge');
+    methodBadge.textContent = methodSelect.options[methodSelect.selectedIndex].text;
+    
+    // Summary statistics
+    document.getElementById('sumSens').textContent = (m.sensitivity.estimate * 100).toFixed(1) + '%';
+    document.getElementById('sumSensCI').textContent = `(${(m.sensitivity.ci[0] * 100).toFixed(1)}–${(m.sensitivity.ci[1] * 100).toFixed(1)}%)`;
+    
+    document.getElementById('sumSpec').textContent = (m.specificity.estimate * 100).toFixed(1) + '%';
+    document.getElementById('sumSpecCI').textContent = `(${(m.specificity.ci[0] * 100).toFixed(1)}–${(m.specificity.ci[1] * 100).toFixed(1)}%)`;
+    
+    document.getElementById('sumPLR').textContent = m.PLR.estimate.toFixed(2);
+    document.getElementById('sumPLRCI').textContent = `(${m.PLR.ci[0].toFixed(2)}–${m.PLR.ci[1].toFixed(2)})`;
+    
+    document.getElementById('sumNLR').textContent = m.NLR.estimate.toFixed(2);
+    document.getElementById('sumNLRCI').textContent = `(${m.NLR.ci[0].toFixed(2)}–${m.NLR.ci[1].toFixed(2)})`;
+    
+    document.getElementById('sumDOR').textContent = m.DOR.estimate.toFixed(1);
+    document.getElementById('sumDORCI').textContent = `(${m.DOR.ci[0].toFixed(1)}–${m.DOR.ci[1].toFixed(1)})`;
+    
+    // Detailed results table
+    const resultsBody = document.getElementById('resultsBody');
+    resultsBody.innerHTML = `
+        <tr>
+            <td class="measure">Sensitivity</td>
+            <td>${(m.sensitivity.estimate * 100).toFixed(2)}%</td>
+            <td>${(m.sensitivity.ci[0] * 100).toFixed(2)}%</td>
+            <td>${(m.sensitivity.ci[1] * 100).toFixed(2)}%</td>
+            <td>${m.sensitivity.se.toFixed(4)}</td>
+        </tr>
+        <tr>
+            <td class="measure">Specificity</td>
+            <td>${(m.specificity.estimate * 100).toFixed(2)}%</td>
+            <td>${(m.specificity.ci[0] * 100).toFixed(2)}%</td>
+            <td>${(m.specificity.ci[1] * 100).toFixed(2)}%</td>
+            <td>${m.specificity.se.toFixed(4)}</td>
+        </tr>
+        <tr>
+            <td class="measure">Positive Likelihood Ratio (LR+)</td>
+            <td>${m.PLR.estimate.toFixed(3)}</td>
+            <td>${m.PLR.ci[0].toFixed(3)}</td>
+            <td>${m.PLR.ci[1].toFixed(3)}</td>
+            <td>—</td>
+        </tr>
+        <tr>
+            <td class="measure">Negative Likelihood Ratio (LR−)</td>
+            <td>${m.NLR.estimate.toFixed(3)}</td>
+            <td>${m.NLR.ci[0].toFixed(3)}</td>
+            <td>${m.NLR.ci[1].toFixed(3)}</td>
+            <td>—</td>
+        </tr>
+        <tr>
+            <td class="measure">Diagnostic Odds Ratio (DOR)</td>
+            <td>${m.DOR.estimate.toFixed(2)}</td>
+            <td>${m.DOR.ci[0].toFixed(2)}</td>
+            <td>${m.DOR.ci[1].toFixed(2)}</td>
+            <td>—</td>
+        </tr>
+    `;
+    
+    // Clinical interpretation
+    let interp = '';
+    const sens = m.sensitivity.estimate;
+    const spec = m.specificity.estimate;
+    const plr = m.PLR.estimate;
+    const nlr = m.NLR.estimate;
+    
+    if (sens >= 0.9 && spec >= 0.9) {
+        interp = 'This test demonstrates excellent diagnostic accuracy with both high sensitivity and specificity. It is suitable for both screening and confirmatory purposes.';
+    } else if (sens >= 0.9) {
+        interp = `This test has high sensitivity (${(sens*100).toFixed(0)}%), making it useful for ruling OUT the condition when negative (SnNout). A negative result substantially decreases the probability of disease.`;
+    } else if (spec >= 0.9) {
+        interp = `This test has high specificity (${(spec*100).toFixed(0)}%), making it useful for ruling IN the condition when positive (SpPin). A positive result substantially increases the probability of disease.`;
+    } else {
+        interp = 'This test has moderate diagnostic accuracy. Consider using it in combination with other tests or clinical findings.';
+    }
+    
+    if (plr > 10) {
+        interp += ` The positive likelihood ratio of ${plr.toFixed(1)} indicates that a positive result provides strong evidence for the presence of disease.`;
+    } else if (plr > 5) {
+        interp += ` The positive likelihood ratio of ${plr.toFixed(1)} indicates moderate evidence for disease when positive.`;
+    }
+    
+    if (nlr < 0.1) {
+        interp += ` The negative likelihood ratio of ${nlr.toFixed(2)} provides strong evidence against disease when the test is negative.`;
+    } else if (nlr < 0.2) {
+        interp += ` The negative likelihood ratio of ${nlr.toFixed(2)} provides moderate evidence against disease when negative.`;
+    }
+    
+    document.getElementById('interpretationText').textContent = interp;
+}
+
+function updateHeterogeneityView() {
+    if (!results) return;
+    const m = results.model;
+    const t = results.threshold;
+    
+    // I² values
+    document.getElementById('i2Sens').textContent = m.sensitivity.I2.toFixed(1) + '%';
+    document.getElementById('i2Spec').textContent = m.specificity.I2.toFixed(1) + '%';
+    
+    // Heterogeneity level labels
+    function hetLevel(i2) {
+        if (i2 < 25) return 'Low';
+        if (i2 < 50) return 'Moderate';
+        if (i2 < 75) return 'Substantial';
+        return 'Considerable';
+    }
+    
+    document.getElementById('i2SensLevel').textContent = hetLevel(m.sensitivity.I2);
+    document.getElementById('i2SpecLevel').textContent = hetLevel(m.specificity.I2);
+    
+    // Tau² values
+    document.getElementById('tauSens').textContent = m.sensitivity.tau2.toFixed(4);
+    document.getElementById('tauSpec').textContent = m.specificity.tau2.toFixed(4);
+    
+    // Correlation
+    document.getElementById('corrValue').textContent = m.correlation.toFixed(3);
+    
+    // Threshold effect
+    if (t.rho !== null) {
+        document.getElementById('spearmanRho').textContent = t.rho.toFixed(3);
+        document.getElementById('thresholdP').textContent = t.p < 0.001 ? '<0.001' : t.p.toFixed(3);
+        
+        const thresholdSig = t.p < 0.05;
+        document.getElementById('hetAlert').className = `alert ${thresholdSig ? 'alert-warning' : 'alert-success'}`;
+        document.getElementById('hetAlert').innerHTML = thresholdSig ?
+            '<strong>Threshold effect detected:</strong> The significant Spearman correlation suggests studies may have used different test thresholds, which could explain heterogeneity.' :
+            '<strong>No significant threshold effect:</strong> Heterogeneity is unlikely to be explained by threshold variation alone.';
+    }
+}
+
+// ========================
+// PLOTTING FUNCTIONS
+// ========================
+function updateAllPlots() {
+    if (!results) return;
+    if (!isPlotlyReady()) {
+        console.warn('Plotly not loaded, skipping plots');
+        showToast('Charts library loading...', 'warning');
+        setTimeout(updateAllPlots, 500);
+        return;
+    }
+    plotForestSensitivity();
+    plotForestSpecificity();
+    plotPairedForest();
+    plotSROC();
+    plotROCSpace();
+    plotDeeksFunnel();
+    plotQUADASSummary();
+    updateFaganPlot();
+}
+
+function getPlotColors() {
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    return {
+        bg: isDark ? '#1c1917' : '#fafaf9',
+        paper: isDark ? '#1c1917' : '#ffffff',
+        text: isDark ? '#fafaf9' : '#1c1917',
+        grid: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+        sensitivity: '#0891b2',
+        specificity: '#be185d',
+        accent: '#0369a1',
+        success: '#059669',
+        warning: '#d97706',
+        danger: '#dc2626'
+    };
+}
+
+function plotForestSensitivity() {
+    const c = getPlotColors();
+    const stats = results.studyStats;
+    
+    const trace = {
+        type: 'scatter',
+        mode: 'markers',
+        x: stats.map(s => s.sens * 100),
+        y: stats.map(s => s.name),
+        error_x: {
+            type: 'data',
+            symmetric: false,
+            array: stats.map(s => (s.sensCI.upper - s.sens) * 100),
+            arrayminus: stats.map(s => (s.sens - s.sensCI.lower) * 100),
+            color: c.sensitivity,
+            thickness: 2
+        },
+        marker: {
+            color: c.sensitivity,
+            size: stats.map(s => Math.max(8, Math.min(20, Math.sqrt(s.diseased) * 2))),
+            line: { color: c.paper, width: 2 }
+        },
+        hovertemplate: '<b>%{y}</b><br>Sens: %{x:.1f}%<extra></extra>'
+    };
+    
+    // Summary line
+    const summaryLine = {
+        type: 'scatter',
+        mode: 'lines',
+        x: [results.model.sensitivity.estimate * 100, results.model.sensitivity.estimate * 100],
+        y: [stats[0].name, stats[stats.length-1].name],
+        line: { color: c.sensitivity, dash: 'dash', width: 2 },
+        showlegend: false,
+        hoverinfo: 'skip'
+    };
+    
+    const layout = {
+        title: { text: 'Sensitivity', font: { family: 'Crimson Pro', size: 16 } },
+        xaxis: { 
+            title: 'Sensitivity (%)', 
+            range: [0, 100], 
+            gridcolor: c.grid,
+            zerolinecolor: c.grid
+        },
+        yaxis: { 
+            autorange: 'reversed',
+            gridcolor: c.grid
+        },
+        paper_bgcolor: c.paper,
+        plot_bgcolor: c.paper,
+        font: { family: 'DM Sans', color: c.text },
+        margin: { l: 120, r: 40, t: 50, b: 50 },
+        showlegend: false
+    };
+    
+    Plotly.newPlot('forestSensPlot', [trace, summaryLine], layout, { responsive: true }).catch(e => console.error('Forest sens plot error:', e));
+}
+
+function plotForestSpecificity() {
+    const c = getPlotColors();
+    const stats = results.studyStats;
+    
+    const trace = {
+        type: 'scatter',
+        mode: 'markers',
+        x: stats.map(s => s.spec * 100),
+        y: stats.map(s => s.name),
+        error_x: {
+            type: 'data',
+            symmetric: false,
+            array: stats.map(s => (s.specCI.upper - s.spec) * 100),
+            arrayminus: stats.map(s => (s.spec - s.specCI.lower) * 100),
+            color: c.specificity,
+            thickness: 2
+        },
+        marker: {
+            color: c.specificity,
+            size: stats.map(s => Math.max(8, Math.min(20, Math.sqrt(s.healthy) * 2))),
+            line: { color: c.paper, width: 2 }
+        },
+        hovertemplate: '<b>%{y}</b><br>Spec: %{x:.1f}%<extra></extra>'
+    };
+    
+    const summaryLine = {
+        type: 'scatter',
+        mode: 'lines',
+        x: [results.model.specificity.estimate * 100, results.model.specificity.estimate * 100],
+        y: [stats[0].name, stats[stats.length-1].name],
+        line: { color: c.specificity, dash: 'dash', width: 2 },
+        showlegend: false,
+        hoverinfo: 'skip'
+    };
+    
+    const layout = {
+        title: { text: 'Specificity', font: { family: 'Crimson Pro', size: 16 } },
+        xaxis: { 
+            title: 'Specificity (%)', 
+            range: [0, 100],
+            gridcolor: c.grid,
+            zerolinecolor: c.grid
+        },
+        yaxis: { 
+            autorange: 'reversed',
+            gridcolor: c.grid
+        },
+        paper_bgcolor: c.paper,
+        plot_bgcolor: c.paper,
+        font: { family: 'DM Sans', color: c.text },
+        margin: { l: 120, r: 40, t: 50, b: 50 },
+        showlegend: false
+    };
+    
+    Plotly.newPlot('forestSpecPlot', [trace, summaryLine], layout, { responsive: true });
+}
+
+function plotPairedForest() {
+    const c = getPlotColors();
+    const stats = results.studyStats;
+    const n = stats.length;
+    
+    // Sensitivity points
+    const sensPts = {
+        type: 'scatter',
+        mode: 'markers',
+        name: 'Sensitivity',
+        x: stats.map(s => s.sens * 100),
+        y: stats.map((s, i) => i + 0.15),
+        error_x: {
+            type: 'data',
+            symmetric: false,
+            array: stats.map(s => (s.sensCI.upper - s.sens) * 100),
+            arrayminus: stats.map(s => (s.sens - s.sensCI.lower) * 100),
+            color: c.sensitivity,
+            thickness: 1.5
+        },
+        marker: { color: c.sensitivity, size: 10, symbol: 'circle' },
+        hovertemplate: '<b>%{text}</b><br>Sens: %{x:.1f}%<extra></extra>',
+        text: stats.map(s => s.name)
+    };
+    
+    // Specificity points
+    const specPts = {
+        type: 'scatter',
+        mode: 'markers',
+        name: 'Specificity',
+        x: stats.map(s => s.spec * 100),
+        y: stats.map((s, i) => i - 0.15),
+        error_x: {
+            type: 'data',
+            symmetric: false,
+            array: stats.map(s => (s.specCI.upper - s.spec) * 100),
+            arrayminus: stats.map(s => (s.spec - s.specCI.lower) * 100),
+            color: c.specificity,
+            thickness: 1.5
+        },
+        marker: { color: c.specificity, size: 10, symbol: 'square' },
+        hovertemplate: '<b>%{text}</b><br>Spec: %{x:.1f}%<extra></extra>',
+        text: stats.map(s => s.name)
+    };
+    
+    // Summary points
+    const summSens = {
+        type: 'scatter',
+        mode: 'markers',
+        name: 'Summary Sens',
+        x: [results.model.sensitivity.estimate * 100],
+        y: [n + 0.5],
+        error_x: {
+            type: 'data',
+            symmetric: false,
+            array: [(results.model.sensitivity.ci[1] - results.model.sensitivity.estimate) * 100],
+            arrayminus: [(results.model.sensitivity.estimate - results.model.sensitivity.ci[0]) * 100],
+            color: c.sensitivity,
+            thickness: 3
+        },
+        marker: { color: c.sensitivity, size: 14, symbol: 'diamond' },
+        showlegend: false
+    };
+    
+    const summSpec = {
+        type: 'scatter',
+        mode: 'markers',
+        name: 'Summary Spec',
+        x: [results.model.specificity.estimate * 100],
+        y: [n + 0.5],
+        error_x: {
+            type: 'data',
+            symmetric: false,
+            array: [(results.model.specificity.ci[1] - results.model.specificity.estimate) * 100],
+            arrayminus: [(results.model.specificity.estimate - results.model.specificity.ci[0]) * 100],
+            color: c.specificity,
+            thickness: 3
+        },
+        marker: { color: c.specificity, size: 14, symbol: 'diamond' },
+        showlegend: false
+    };
+    
+    const layout = {
+        title: { text: 'Paired Forest Plot', font: { family: 'Crimson Pro', size: 18 } },
+        xaxis: { 
+            title: 'Estimate (%)', 
+            range: [0, 100],
+            gridcolor: c.grid,
+            dtick: 20
+        },
+        yaxis: { 
+            tickvals: [...Array(n).keys()].concat([n + 0.5]),
+            ticktext: stats.map(s => s.name).concat(['Summary']),
+            autorange: 'reversed',
+            gridcolor: c.grid
+        },
+        paper_bgcolor: c.paper,
+        plot_bgcolor: c.paper,
+        font: { family: 'DM Sans', color: c.text },
+        margin: { l: 140, r: 40, t: 60, b: 50 },
+        legend: { x: 0.7, y: 0.98, bgcolor: 'rgba(0,0,0,0)' },
+        shapes: [{
+            type: 'line',
+            x0: 0, x1: 100,
+            y0: n, y1: n,
+            line: { color: c.grid, width: 2 }
+        }]
+    };
+    
+    Plotly.newPlot('pairedForestPlot', [sensPts, specPts, summSens, summSpec], layout, { responsive: true });
+}
+
+function plotSROC() {
+    if (!isPlotlyReady()) return;
+    const c = getPlotColors();
+    const stats = results.studyStats;
+    const sroc = results.sroc;
+    const regionType = document.getElementById('srocRegion').value;
+    
+    const traces = [];
+    
+    // SROC curve
+    if (sroc && sroc.points.length > 0) {
+        traces.push({
+            type: 'scatter',
+            mode: 'lines',
+            name: 'SROC Curve',
+            x: sroc.points.map(p => p.fpr * 100),
+            y: sroc.points.map(p => p.sens * 100),
+            line: { color: c.accent, width: 3 },
+            hovertemplate: 'FPR: %{x:.1f}%<br>Sens: %{y:.1f}%<extra></extra>'
+        });
+    }
+    
+    // Diagonal reference
+    traces.push({
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Reference',
+        x: [0, 100],
+        y: [0, 100],
+        line: { color: c.grid, dash: 'dash', width: 1 },
+        showlegend: false,
+        hoverinfo: 'skip'
+    });
+    
+    // Study points
+    traces.push({
+        type: 'scatter',
+        mode: 'markers',
+        name: 'Studies',
+        x: stats.map(s => (1 - s.spec) * 100),
+        y: stats.map(s => s.sens * 100),
+        marker: {
+            color: c.accent,
+            size: stats.map(s => Math.max(10, Math.min(25, Math.sqrt(s.total) * 1.5))),
+            opacity: 0.7,
+            line: { color: c.paper, width: 2 }
+        },
+        text: stats.map(s => s.name),
+        hovertemplate: '<b>%{text}</b><br>FPR: %{x:.1f}%<br>Sens: %{y:.1f}%<extra></extra>'
+    });
+    
+    // Summary operating point
+    const sumFPR = (1 - results.model.specificity.estimate) * 100;
+    const sumSens = results.model.sensitivity.estimate * 100;
+    
+    traces.push({
+        type: 'scatter',
+        mode: 'markers',
+        name: 'Summary Point',
+        x: [sumFPR],
+        y: [sumSens],
+        marker: {
+            color: c.danger,
+            size: 16,
+            symbol: 'star',
+            line: { color: c.paper, width: 2 }
+        },
+        hovertemplate: '<b>Summary</b><br>FPR: %{x:.1f}%<br>Sens: %{y:.1f}%<extra></extra>'
+    });
+    
+    // Confidence/Prediction ellipse (simplified)
+    if (regionType === 'confidence' || regionType === 'both') {
+        const ellipse = generateEllipse(
+            sumFPR, sumSens,
+            5, 5, // Semi-axes (simplified)
+            0, // Rotation
+            'Confidence'
+        );
+        traces.push({
+            ...ellipse,
+            line: { color: c.accent, width: 2 },
+            fillcolor: 'rgba(3, 105, 161, 0.1)'
+        });
+    }
+    
+    if (regionType === 'prediction' || regionType === 'both') {
+        const ellipse = generateEllipse(
+            sumFPR, sumSens,
+            12, 12,
+            0,
+            'Prediction'
+        );
+        traces.push({
+            ...ellipse,
+            line: { color: c.accent, width: 1, dash: 'dot' },
+            fillcolor: 'rgba(3, 105, 161, 0.05)'
+        });
+    }
+    
+    const layout = {
+        title: { text: 'Summary ROC Curve', font: { family: 'Crimson Pro', size: 18 } },
+        xaxis: { 
+            title: 'False Positive Rate (1 - Specificity) %', 
+            range: [0, 100],
+            gridcolor: c.grid,
+            dtick: 20
+        },
+        yaxis: { 
+            title: 'Sensitivity (True Positive Rate) %', 
+            range: [0, 100],
+            gridcolor: c.grid,
+            dtick: 20
+        },
+        paper_bgcolor: c.paper,
+        plot_bgcolor: c.paper,
+        font: { family: 'DM Sans', color: c.text },
+        margin: { l: 60, r: 40, t: 60, b: 60 },
+        legend: { x: 0.6, y: 0.15 },
+        aspectratio: { x: 1, y: 1 }
+    };
+    
+    Plotly.newPlot('srocPlot', traces, layout, { responsive: true });
+    
+    // Update stats
+    if (sroc) {
+        document.getElementById('aucValue').textContent = sroc.auc.toFixed(3);
+        document.getElementById('aucCI').textContent = `(${(sroc.auc - 0.05).toFixed(3)}–${Math.min(1, sroc.auc + 0.05).toFixed(3)})`;
+        document.getElementById('qstarValue').textContent = (sroc.qStar * 100).toFixed(1) + '%';
+        document.getElementById('dPrimeValue').textContent = sroc.dPrime.toFixed(2);
+    }
+}
+
+function generateEllipse(cx, cy, rx, ry, rotation, name) {
+    const points = 100;
+    const x = [], y = [];
+    
+    for (let i = 0; i <= points; i++) {
+        const angle = (2 * Math.PI * i) / points;
+        const px = rx * Math.cos(angle);
+        const py = ry * Math.sin(angle);
+        
+        // Apply rotation
+        const rotRad = rotation * Math.PI / 180;
+        const rotX = px * Math.cos(rotRad) - py * Math.sin(rotRad);
+        const rotY = px * Math.sin(rotRad) + py * Math.cos(rotRad);
+        
+        x.push(cx + rotX);
+        y.push(cy + rotY);
+    }
+    
+    return {
+        type: 'scatter',
+        mode: 'lines',
+        name: name,
+        x: x,
+        y: y,
+        fill: 'toself'
+    };
+}
+
+function updateSROC() {
+    if (results && isPlotlyReady()) plotSROC();
+}
+
+function plotROCSpace() {
+    const c = getPlotColors();
+    const stats = results.studyStats;
+    
+    // Plot logit(sens) vs logit(1-spec) to visualize threshold effect
+    const trace = {
+        type: 'scatter',
+        mode: 'markers+text',
+        x: stats.map(s => s.sensLogit),
+        y: stats.map(s => logit(1 - s.spec)),
+        marker: {
+            color: c.accent,
+            size: 12,
+            line: { color: c.paper, width: 2 }
+        },
+        text: stats.map(s => s.name),
+        textposition: 'top center',
+        textfont: { size: 10, color: c.text },
+        hovertemplate: '<b>%{text}</b><br>logit(Sens): %{x:.2f}<br>logit(1-Spec): %{y:.2f}<extra></extra>'
+    };
+    
+    // Regression line for threshold effect
+    const xs = stats.map(s => s.sensLogit);
+    const ys = stats.map(s => logit(1 - s.spec));
+    const meanX = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const meanY = ys.reduce((a, b) => a + b, 0) / ys.length;
+    
+    let sumXY = 0, sumXX = 0;
+    for (let i = 0; i < xs.length; i++) {
+        sumXY += (xs[i] - meanX) * (ys[i] - meanY);
+        sumXX += (xs[i] - meanX) * (xs[i] - meanX);
+    }
+    const slope = sumXX > 0 ? sumXY / sumXX : 0;
+    const intercept = meanY - slope * meanX;
+    
+    const minX = Math.min(...xs) - 0.5;
+    const maxX = Math.max(...xs) + 0.5;
+    
+    const regressionLine = {
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Threshold trend',
+        x: [minX, maxX],
+        y: [intercept + slope * minX, intercept + slope * maxX],
+        line: { color: c.sensitivity, dash: 'dash', width: 2 }
+    };
+    
+    const layout = {
+        title: { text: 'ROC Space (Threshold Effect)', font: { family: 'Crimson Pro', size: 16 } },
+        xaxis: { 
+            title: 'logit(Sensitivity)',
+            gridcolor: c.grid
+        },
+        yaxis: { 
+            title: 'logit(1 - Specificity)',
+            gridcolor: c.grid
+        },
+        paper_bgcolor: c.paper,
+        plot_bgcolor: c.paper,
+        font: { family: 'DM Sans', color: c.text },
+        margin: { l: 60, r: 40, t: 60, b: 60 },
+        showlegend: true,
+        legend: { x: 0.02, y: 0.98 }
+    };
+    
+    Plotly.newPlot('rocSpacePlot', [trace, regressionLine], layout, { responsive: true });
+}
+
+function plotDeeksFunnel() {
+    if (!isPlotlyReady()) return;
+    const c = getPlotColors();
+    const deeks = results.deeks;
+    const stats = results.studyStats;
+    
+    if (!deeks || deeks.slope === null) {
+        Plotly.newPlot('deeksPlot', [], {
+            paper_bgcolor: c.paper,
+            plot_bgcolor: c.paper
+        }).catch(() => {});
+        return;
+    }
+    
+    // Points
+    const trace = {
+        type: 'scatter',
+        mode: 'markers',
+        name: 'Studies',
+        x: deeks.invSqrtESS,
+        y: deeks.logDOR,
+        marker: {
+            color: c.accent,
+            size: 12,
+            line: { color: c.paper, width: 2 }
+        },
+        text: stats.map(s => s.name),
+        hovertemplate: '<b>%{text}</b><br>1/√ESS: %{x:.3f}<br>log(DOR): %{y:.2f}<extra></extra>'
+    };
+    
+    // Regression line
+    const minX = Math.min(...deeks.invSqrtESS) * 0.8;
+    const maxX = Math.max(...deeks.invSqrtESS) * 1.2;
+    
+    const regressionLine = {
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Regression',
+        x: [minX, maxX],
+        y: [deeks.intercept + deeks.slope * minX, deeks.intercept + deeks.slope * maxX],
+        line: { color: c.danger, width: 2 }
+    };
+    
+    const layout = {
+        title: { text: "Deeks' Funnel Plot", font: { family: 'Crimson Pro', size: 18 } },
+        xaxis: { 
+            title: '1 / √(Effective Sample Size)',
+            gridcolor: c.grid
+        },
+        yaxis: { 
+            title: 'log(Diagnostic Odds Ratio)',
+            gridcolor: c.grid
+        },
+        paper_bgcolor: c.paper,
+        plot_bgcolor: c.paper,
+        font: { family: 'DM Sans', color: c.text },
+        margin: { l: 60, r: 40, t: 60, b: 60 },
+        legend: { x: 0.02, y: 0.98 }
+    };
+    
+    Plotly.newPlot('deeksPlot', [trace, regressionLine], layout, { responsive: true });
+    
+    // Update statistics
+    document.getElementById('deeksSlope').textContent = deeks.slope.toFixed(3);
+    document.getElementById('deeksP').textContent = deeks.p < 0.001 ? '<0.001' : deeks.p.toFixed(3);
+    
+    const sig = deeks.p < 0.1;
+    document.getElementById('deeksSig').textContent = sig ? 'Significant' : 'Not significant';
+    document.getElementById('deeksSig').style.color = sig ? c.danger : c.success;
+    document.getElementById('deeksConclusion').textContent = sig ? 'Bias suspected' : 'No evidence';
+    document.getElementById('deeksConclusion').parentElement.querySelector('.stat-value').className = 
+        `stat-value ${sig ? 'warning' : 'success'}`;
+}
+
+// ========================
+// QUADAS-2
+// ========================
+function renderQUADASGrid() {
+    const container = document.getElementById('quadasGrid');
+    
+    // Keep header
+    let html = `
+        <div class="quadas-header">Study</div>
+        <div class="quadas-header">Patient Selection</div>
+        <div class="quadas-header">Index Test</div>
+        <div class="quadas-header">Reference Standard</div>
+        <div class="quadas-header">Flow & Timing</div>
+        <div class="quadas-header">Overall</div>
+    `;
+    
+    studies.forEach(study => {
+        const q = study.quadas;
+        const overall = getOverallRoB(q);
+        
+        html += `
+            <div class="quadas-cell quadas-study">${study.name}</div>
+            <div class="quadas-cell">
+                <select class="rob-select" onchange="updateQUADAS(${study.id}, 'patient', this.value)">
+                    <option value="low" ${q.patient === 'low' ? 'selected' : ''}>Low</option>
+                    <option value="some" ${q.patient === 'some' ? 'selected' : ''}>Some concerns</option>
+                    <option value="high" ${q.patient === 'high' ? 'selected' : ''}>High</option>
+                    <option value="unclear" ${q.patient === 'unclear' ? 'selected' : ''}>Unclear</option>
+                </select>
+            </div>
+            <div class="quadas-cell">
+                <select class="rob-select" onchange="updateQUADAS(${study.id}, 'index', this.value)">
+                    <option value="low" ${q.index === 'low' ? 'selected' : ''}>Low</option>
+                    <option value="some" ${q.index === 'some' ? 'selected' : ''}>Some concerns</option>
+                    <option value="high" ${q.index === 'high' ? 'selected' : ''}>High</option>
+                    <option value="unclear" ${q.index === 'unclear' ? 'selected' : ''}>Unclear</option>
+                </select>
+            </div>
+            <div class="quadas-cell">
+                <select class="rob-select" onchange="updateQUADAS(${study.id}, 'reference', this.value)">
+                    <option value="low" ${q.reference === 'low' ? 'selected' : ''}>Low</option>
+                    <option value="some" ${q.reference === 'some' ? 'selected' : ''}>Some concerns</option>
+                    <option value="high" ${q.reference === 'high' ? 'selected' : ''}>High</option>
+                    <option value="unclear" ${q.reference === 'unclear' ? 'selected' : ''}>Unclear</option>
+                </select>
+            </div>
+            <div class="quadas-cell">
+                <select class="rob-select" onchange="updateQUADAS(${study.id}, 'flow', this.value)">
+                    <option value="low" ${q.flow === 'low' ? 'selected' : ''}>Low</option>
+                    <option value="some" ${q.flow === 'some' ? 'selected' : ''}>Some concerns</option>
+                    <option value="high" ${q.flow === 'high' ? 'selected' : ''}>High</option>
+                    <option value="unclear" ${q.flow === 'unclear' ? 'selected' : ''}>Unclear</option>
+                </select>
+            </div>
+            <div class="quadas-cell">
+                <span class="rob-indicator rob-${overall}">${overall === 'low' ? '✓' : overall === 'high' ? '✗' : '?'}</span>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function updateQUADAS(studyId, domain, value) {
+    const study = studies.find(s => s.id === studyId);
+    if (study) {
+        study.quadas[domain] = value;
+        renderQUADASGrid();
+        plotQUADASSummary();
+    }
+}
+
+function getOverallRoB(q) {
+    const values = [q.patient, q.index, q.reference, q.flow];
+    if (values.includes('high')) return 'high';
+    if (values.includes('some')) return 'some';
+    if (values.includes('unclear')) return 'unclear';
+    return 'low';
+}
+
+function plotQUADASSummary() {
+    if (!isPlotlyReady()) return;
+    const c = getPlotColors();
+    
+    if (studies.length === 0) {
+        Plotly.newPlot('quadasSummaryPlot', [], {
+            paper_bgcolor: c.paper,
+            plot_bgcolor: c.paper
+        });
+        return;
+    }
+    
+    const domains = ['patient', 'index', 'reference', 'flow'];
+    const domainLabels = ['Patient Selection', 'Index Test', 'Reference Standard', 'Flow & Timing'];
+    
+    const counts = domains.map(domain => {
+        const vals = studies.map(s => s.quadas[domain]);
+        return {
+            low: vals.filter(v => v === 'low').length,
+            some: vals.filter(v => v === 'some').length,
+            high: vals.filter(v => v === 'high').length,
+            unclear: vals.filter(v => v === 'unclear').length
+        };
+    });
+    
+    const traces = [
+        {
+            name: 'Low risk',
+            type: 'bar',
+            x: domainLabels,
+            y: counts.map(c => c.low / studies.length * 100),
+            marker: { color: c.success }
+        },
+        {
+            name: 'Some concerns',
+            type: 'bar',
+            x: domainLabels,
+            y: counts.map(c => c.some / studies.length * 100),
+            marker: { color: c.warning }
+        },
+        {
+            name: 'High risk',
+            type: 'bar',
+            x: domainLabels,
+            y: counts.map(c => c.high / studies.length * 100),
+            marker: { color: c.danger }
+        },
+        {
+            name: 'Unclear',
+            type: 'bar',
+            x: domainLabels,
+            y: counts.map(c => c.unclear / studies.length * 100),
+            marker: { color: '#9ca3af' }
+        }
+    ];
+    
+    const layout = {
+        barmode: 'stack',
+        title: { text: 'Risk of Bias Summary', font: { family: 'Crimson Pro', size: 16 } },
+        xaxis: { tickangle: -30 },
+        yaxis: { title: 'Proportion (%)', range: [0, 100] },
+        paper_bgcolor: c.paper,
+        plot_bgcolor: c.paper,
+        font: { family: 'DM Sans', color: c.text },
+        margin: { l: 50, r: 20, t: 50, b: 100 },
+        legend: { orientation: 'h', y: -0.3 }
+    };
+    
+    Plotly.newPlot('quadasSummaryPlot', traces, layout, { responsive: true });
+    
+    // Traffic light plot
+    const trafficData = [];
+    
+    studies.forEach((study, i) => {
+        domains.forEach((domain, j) => {
+            const val = study.quadas[domain];
+            let color = val === 'low' ? c.success : val === 'high' ? c.danger : val === 'some' ? c.warning : '#9ca3af';
+            trafficData.push({
+                x: [j],
+                y: [i],
+                mode: 'markers',
+                marker: {
+                    size: 20,
+                    color: color,
+                    symbol: val === 'low' ? 'circle' : val === 'high' ? 'x' : 'diamond'
+                },
+                showlegend: false,
+                hoverinfo: 'text',
+                text: `${study.name}<br>${domainLabels[j]}: ${val}`
+            });
+        });
+    });
+    
+    const trafficLayout = {
+        title: { text: 'Traffic Light Plot', font: { family: 'Crimson Pro', size: 16 } },
+        xaxis: {
+            tickvals: [0, 1, 2, 3],
+            ticktext: ['PS', 'IT', 'RS', 'F&T'],
+            side: 'top'
+        },
+        yaxis: {
+            tickvals: [...Array(studies.length).keys()],
+            ticktext: studies.map(s => s.name),
+            autorange: 'reversed'
+        },
+        paper_bgcolor: c.paper,
+        plot_bgcolor: c.paper,
+        font: { family: 'DM Sans', color: c.text, size: 11 },
+        margin: { l: 100, r: 20, t: 50, b: 20 }
+    };
+    
+    Plotly.newPlot('quadasTrafficPlot', trafficData, trafficLayout, { responsive: true });
+}
+
+// ========================
+// FAGAN NOMOGRAM
+// ========================
+function updateNomogram() {
+    const pretest = parseFloat(document.getElementById('pretestSlider').value);
+    document.getElementById('pretestValue').textContent = pretest + '%';
+    
+    if (!results) {
+        document.getElementById('faganLRP').textContent = '—';
+        document.getElementById('faganLRN').textContent = '—';
+        document.getElementById('postPosValue').textContent = '—';
+        document.getElementById('postNegValue').textContent = '—';
+        return;
+    }
+    
+    const plr = results.model.PLR.estimate;
+    const nlr = results.model.NLR.estimate;
+    
+    document.getElementById('faganLRP').textContent = plr.toFixed(2);
+    document.getElementById('faganLRN').textContent = nlr.toFixed(2);
+    
+    // Calculate post-test probabilities
+    const pretestOdds = pretest / (100 - pretest);
+    
+    const postPosOdds = pretestOdds * plr;
+    const postNegOdds = pretestOdds * nlr;
+    
+    const postPos = (postPosOdds / (1 + postPosOdds)) * 100;
+    const postNeg = (postNegOdds / (1 + postNegOdds)) * 100;
+    
+    document.getElementById('postPosValue').textContent = postPos.toFixed(1) + '%';
+    document.getElementById('postNegValue').textContent = postNeg.toFixed(1) + '%';
+    
+    // Interpretation
+    const changePos = postPos - pretest;
+    const changeNeg = pretest - postNeg;
+    
+    let interp = '';
+    if (changePos > 30) {
+        interp = `A positive test result dramatically increases the probability of disease from ${pretest}% to ${postPos.toFixed(1)}% (+${changePos.toFixed(1)} percentage points). `;
+    } else if (changePos > 15) {
+        interp = `A positive test result substantially increases the probability of disease from ${pretest}% to ${postPos.toFixed(1)}%. `;
+    } else {
+        interp = `A positive test result modestly increases the probability of disease from ${pretest}% to ${postPos.toFixed(1)}%. `;
+    }
+    
+    if (changeNeg > 20) {
+        interp += `A negative result substantially reduces the probability from ${pretest}% to ${postNeg.toFixed(1)}% (−${changeNeg.toFixed(1)} percentage points).`;
+    } else if (changeNeg > 10) {
+        interp += `A negative result moderately reduces the probability to ${postNeg.toFixed(1)}%.`;
+    } else {
+        interp += `A negative result only slightly reduces the probability to ${postNeg.toFixed(1)}%.`;
+    }
+    
+    document.getElementById('faganInterpretation').textContent = interp;
+    
+    updateFaganPlot();
+}
+
+function updateFaganPlot() {
+    if (!isPlotlyReady()) return;
+    const c = getPlotColors();
+    
+    if (!results) {
+        Plotly.newPlot('faganPlot', [], {
+            paper_bgcolor: c.paper,
+            plot_bgcolor: c.paper
+        });
+        return;
+    }
+    
+    const pretest = parseFloat(document.getElementById('pretestSlider').value);
+    const plr = results.model.PLR.estimate;
+    const nlr = results.model.NLR.estimate;
+    
+    // Convert to odds
+    const pretestOdds = pretest / (100 - pretest);
+    const postPosOdds = pretestOdds * plr;
+    const postNegOdds = pretestOdds * nlr;
+    const postPos = (postPosOdds / (1 + postPosOdds)) * 100;
+    const postNeg = (postNegOdds / (1 + postNegOdds)) * 100;
+    
+    // Create log odds scale positions
+    function probToY(p) {
+        if (p <= 0.1) p = 0.1;
+        if (p >= 99.9) p = 99.9;
+        return Math.log(p / (100 - p));
+    }
+    
+    function lrToY(lr) {
+        return Math.log(lr);
+    }
+    
+    // Three vertical axes: Pre-test prob, LR, Post-test prob
+    const traces = [];
+    
+    // Pre-test probability axis (left)
+    const probTicks = [0.1, 0.5, 1, 2, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99];
+    
+    // Plot as scatter with text
+    traces.push({
+        type: 'scatter',
+        mode: 'text',
+        x: probTicks.map(() => 0),
+        y: probTicks.map(p => probToY(p)),
+        text: probTicks.map(p => p + '%'),
+        textfont: { size: 10, color: c.text },
+        showlegend: false,
+        hoverinfo: 'skip'
+    });
+    
+    // LR axis (middle)
+    const lrTicks = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+    
+    traces.push({
+        type: 'scatter',
+        mode: 'text',
+        x: lrTicks.map(() => 1),
+        y: lrTicks.map(lr => lrToY(lr)),
+        text: lrTicks.map(lr => lr >= 1 ? lr.toString() : lr.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')),
+        textfont: { size: 9, color: c.text },
+        showlegend: false,
+        hoverinfo: 'skip'
+    });
+    
+    // Post-test probability axis (right)
+    traces.push({
+        type: 'scatter',
+        mode: 'text',
+        x: probTicks.map(() => 2),
+        y: probTicks.map(p => probToY(p)),
+        text: probTicks.map(p => p + '%'),
+        textfont: { size: 10, color: c.text },
+        showlegend: false,
+        hoverinfo: 'skip'
+    });
+    
+    // Line for positive test
+    traces.push({
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: 'Positive test',
+        x: [0, 1, 2],
+        y: [probToY(pretest), lrToY(plr), probToY(postPos)],
+        line: { color: c.sensitivity, width: 3 },
+        marker: { size: 10 }
+    });
+    
+    // Line for negative test
+    traces.push({
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: 'Negative test',
+        x: [0, 1, 2],
+        y: [probToY(pretest), lrToY(nlr), probToY(postNeg)],
+        line: { color: c.specificity, width: 3 },
+        marker: { size: 10 }
+    });
+    
+    const layout = {
+        title: { text: 'Fagan Nomogram', font: { family: 'Crimson Pro', size: 18 } },
+        xaxis: {
+            tickvals: [0, 1, 2],
+            ticktext: ['Pre-test<br>Probability', 'Likelihood<br>Ratio', 'Post-test<br>Probability'],
+            range: [-0.3, 2.3],
+            showgrid: false
+        },
+        yaxis: {
+            showticklabels: false,
+            showgrid: false,
+            zeroline: false,
+            range: [probToY(0.1), probToY(99.9)]
+        },
+        paper_bgcolor: c.paper,
+        plot_bgcolor: c.paper,
+        font: { family: 'DM Sans', color: c.text },
+        margin: { l: 20, r: 20, t: 60, b: 60 },
+        legend: { x: 0.35, y: -0.15, orientation: 'h' },
+        shapes: [
+            { type: 'line', x0: 0, x1: 0, y0: probToY(0.1), y1: probToY(99.9), line: { color: c.border, width: 2 } },
+            { type: 'line', x0: 1, x1: 1, y0: lrToY(0.001), y1: lrToY(1000), line: { color: c.border, width: 2 } },
+            { type: 'line', x0: 2, x1: 2, y0: probToY(0.1), y1: probToY(99.9), line: { color: c.border, width: 2 } }
+        ]
+    };
+    
+    Plotly.newPlot('faganPlot', traces, layout, { responsive: true });
+}
+
+// ========================
+// EXPORT FUNCTIONS
+// ========================
+function generateRCode() {
+    if (!results) return;
+    
+    const dataStr = studies.filter(s => s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '').map(s => 
+        `  c(TP=${s.tp}, FP=${s.fp}, FN=${s.fn}, TN=${s.tn})  # ${s.name}`
+    ).join(',\n');
+    
+    const code = `# DTA Meta-Analysis in R
+
+Generated by DTA Meta-Analysis Suite
+Install required packages
+install.packages(c("mada", "metafor", "meta"))
+library(mada) library(metafor)
+
+Study data
+data <- data.frame( study = c(${studies.filter(s => s.tp !== '').map(s => "${s.name}").join(', ')}), TP = c(${studies.filter(s => s.tp !== '').map(s => s.tp).join(', ')}), FP = c(${studies.filter(s => s.fp !== '').map(s => s.fp).join(', ')}), FN = c(${studies.filter(s => s.fn !== '').map(s => s.fn).join(', ')}), TN = c(${studies.filter(s => s.tn !== '').map(s => s.tn).join(', ')}) )
+
+Bivariate random effects model (Reitsma)
+fit <- reitsma(data) summary(fit)
+
+Forest plots
+forest(madad(data), type = "sens") forest(madad(data), type = "spec")
+
+SROC curve
+plot(fit, sroclwd = 2, main = "SROC Curve") points(fpr(data), sens(data), pch = 19)
+
+Calculate summary estimates
+sens_sum <- summary(fit)$coefficients["tsens.", "Estimate"] spec_sum <- summary(fit)$coefficients["tfpr.", "Estimate"]
+
+cat("\nSummary Sensitivity:", plogis(sens_sum)) cat("\nSummary Specificity:", 1 - plogis(spec_sum))
+
+Heterogeneity
+cat("\nI² Sensitivity:", round(summary(fit)$Isens, 1), "%") cat("\nI² Specificity:", round(summary(fit)$Ifpr, 1), "%")
+
+Likelihood ratios
+posLR(fit) negLR(fit)
+
+DOR
+DOR(fit)
+
+HSROC model alternative
+fit_hsroc <- reitsma(data, method = "ml")
+summary(fit_hsroc)
+`;
+
+    document.getElementById('rCodeOutput').textContent = code;
+}
+
+function copyRCode() {
+    const code = document.getElementById('rCodeOutput').textContent;
+    navigator.clipboard.writeText(code).then(() => {
+        showToast('R code copied to clipboard');
+    });
+}
+
+function exportCSV() {
+    const validStudies = studies.filter(s => s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '');
+    
+    if (validStudies.length === 0) {
+        showToast('No valid data to export', 'error');
+        return;
+    }
+    
+    let csv = 'Study,TP,FP,FN,TN,Sensitivity,Specificity,DOR\n';
+    
+    validStudies.forEach(s => {
+        const stats = calcStudyStats(s);
+        csv += `"${s.name}",${s.tp},${s.fp},${s.fn},${s.tn},${stats.sens.toFixed(4)},${stats.spec.toFixed(4)},${stats.dor.toFixed(2)}\n`;
+    });
+    
+    downloadFile(csv, 'dta_data.csv', 'text/csv');
+    showToast('Data exported as CSV');
+}
+
+function exportResults() {
+    if (!results) {
+        showToast('Run analysis first', 'error');
+        return;
+    }
+    
+    const output = {
+        summary: {
+            sensitivity: {
+                estimate: results.model.sensitivity.estimate,
+                ci: results.model.sensitivity.ci,
+                I2: results.model.sensitivity.I2,
+                tau2: results.model.sensitivity.tau2
+            },
+            specificity: {
+                estimate: results.model.specificity.estimate,
+                ci: results.model.specificity.ci,
+                I2: results.model.specificity.I2,
+                tau2: results.model.specificity.tau2
+            },
+            PLR: results.model.PLR,
+            NLR: results.model.NLR,
+            DOR: results.model.DOR
+        },
+        sroc: results.sroc ? {
+            auc: results.sroc.auc,
+            qStar: results.sroc.qStar,
+            dPrime: results.sroc.dPrime
+        } : null,
+        heterogeneity: {
+            correlation: results.model.correlation,
+            thresholdEffect: results.threshold
+        },
+        publicationBias: results.deeks,
+        nStudies: results.k
+    };
+    
+    downloadFile(JSON.stringify(output, null, 2), 'dta_results.json', 'application/json');
+    showToast('Results exported as JSON');
+}
+
+function generateReport() {
+    if (!results) {
+        showToast('Run analysis first', 'error');
+        return;
+    }
+    
+    const m = results.model;
+    
+    const report = `
+
+DTA META-ANALYSIS REPORT
+Generated: ${new Date().toLocaleString()}
+
+SUMMARY ESTIMATES
+Studies included: ${results.k}
+
+Sensitivity: ${(m.sensitivity.estimate * 100).toFixed(1)}% (95% CI: ${(m.sensitivity.ci[0] * 100).toFixed(1)}–${(m.sensitivity.ci[1] * 100).toFixed(1)}%) Specificity: ${(m.specificity.estimate * 100).toFixed(1)}% (95% CI: ${(m.specificity.ci[0] * 100).toFixed(1)}–${(m.specificity.ci[1] * 100).toFixed(1)}%)
+
+Positive Likelihood Ratio (LR+): ${m.PLR.estimate.toFixed(2)} (95% CI: ${m.PLR.ci[0].toFixed(2)}–${m.PLR.ci[1].toFixed(2)}) Negative Likelihood Ratio (LR−): ${m.NLR.estimate.toFixed(2)} (95% CI: ${m.NLR.ci[0].toFixed(2)}–${m.NLR.ci[1].toFixed(2)}) Diagnostic Odds Ratio (DOR): ${m.DOR.estimate.toFixed(1)} (95% CI: ${m.DOR.ci[0].toFixed(1)}–${m.DOR.ci[1].toFixed(1)})
+
+HETEROGENEITY
+I² Sensitivity: ${m.sensitivity.I2.toFixed(1)}% I² Specificity: ${m.specificity.I2.toFixed(1)}% Between-study correlation: ${m.correlation.toFixed(3)}
+
+Threshold Effect Test: Spearman ρ: ${results.threshold.rho?.toFixed(3) || 'N/A'} P-value: ${results.threshold.p < 0.001 ? '<0.001' : results.threshold.p?.toFixed(3) || 'N/A'}
+
+SROC CURVE
+AUC: ${results.sroc?.auc.toFixed(3) || 'N/A'} Q* Index: ${results.sroc?.qStar ? (results.sroc.qStar * 100).toFixed(1) + '%' : 'N/A'}
+
+PUBLICATION BIAS (Deeks' Test)
+Regression slope: ${results.deeks.slope?.toFixed(3) || 'N/A'} P-value: ${results.deeks.p < 0.001 ? '<0.001' : results.deeks.p?.toFixed(3) || 'N/A'} Conclusion: ${results.deeks.p < 0.1 ? 'Evidence of publication bias' : 'No significant asymmetry'}
+
+INDIVIDUAL STUDY DATA
+${results.studyStats.map(s => ${s.name}: Sens=${(s.sens*100).toFixed(1)}%, Spec=${(s.spec*100).toFixed(1)}%, N=${s.total} ).join('\n')} `;
+
+    downloadFile(report, 'dta_report.txt', 'text/plain');
+    showToast('Report generated');
+}
+
+function exportQUADAS() {
+    let csv = 'Study,Patient Selection,Index Test,Reference Standard,Flow & Timing,Overall\n';
+    
+    studies.forEach(s => {
+        const overall = getOverallRoB(s.quadas);
+        csv += `"${s.name}",${s.quadas.patient},${s.quadas.index},${s.quadas.reference},${s.quadas.flow},${overall}\n`;
+    });
+    
+    downloadFile(csv, 'quadas2_assessment.csv', 'text/csv');
+    showToast('QUADAS-2 data exported');
+}
+
+function downloadFile(content, filename, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// ========================
+// UTILITIES
+// ========================
+function showToast(message, type = 'info') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+// Check if Plotly is available
+function isPlotlyReady() {
+    return typeof Plotly !== 'undefined';
+}
+
+// Safe plot function wrapper
+function safePlot(elementId, data, layout, config) {
+    if (!isPlotlyReady()) {
+        console.warn('Plotly not loaded yet');
+        return;
+    }
+    try {
+        Plotly.newPlot(elementId, data, layout, config || { responsive: true });
+    } catch (e) {
+        console.error('Plot error:', e);
+    }
+}
+
+// ========================
+// INITIALIZATION
+// ========================
+function initApp() {
+    // Add initial empty rows
+    addStudy();
+    addStudy();
+    addStudy();
+    
+    // Update stats
+    updateQuickStats();
+    
+    // Render QUADAS grid
+    renderQUADASGrid();
+    
+    console.log('DTA Meta-Analysis Suite initialized');
+}
+
+// Wait for DOM and Plotly to be ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    initApp();
+}
+</script>
+
+</body> </html>

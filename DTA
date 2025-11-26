@@ -1874,9 +1874,275 @@ function gammaLn(x) {
     return -tmp + Math.log(2.5066282746310005 * ser / x);
 }
 
+// ========================
+// MATRIX OPERATIONS FOR BIVARIATE REML
+// ========================
+
+/**
+ * 2x2 Matrix operations for bivariate model
+ */
+const Matrix2x2 = {
+    // Create 2x2 matrix
+    create(a, b, c, d) {
+        return [[a, b], [c, d]];
+    },
+
+    // Matrix addition
+    add(A, B) {
+        return [
+            [A[0][0] + B[0][0], A[0][1] + B[0][1]],
+            [A[1][0] + B[1][0], A[1][1] + B[1][1]]
+        ];
+    },
+
+    // Matrix inverse
+    inverse(A) {
+        const det = A[0][0] * A[1][1] - A[0][1] * A[1][0];
+        if (Math.abs(det) < 1e-15) return null;
+        return [
+            [A[1][1] / det, -A[0][1] / det],
+            [-A[1][0] / det, A[0][0] / det]
+        ];
+    },
+
+    // Determinant
+    det(A) {
+        return A[0][0] * A[1][1] - A[0][1] * A[1][0];
+    },
+
+    // Matrix-vector multiply
+    mulVec(A, v) {
+        return [
+            A[0][0] * v[0] + A[0][1] * v[1],
+            A[1][0] * v[0] + A[1][1] * v[1]
+        ];
+    },
+
+    // Scalar multiply
+    scale(A, s) {
+        return [
+            [A[0][0] * s, A[0][1] * s],
+            [A[1][0] * s, A[1][1] * s]
+        ];
+    },
+
+    // Trace
+    trace(A) {
+        return A[0][0] + A[1][1];
+    }
+};
+
+/**
+ * True Bivariate REML estimation using iterative algorithm
+ * Estimates the between-study variance-covariance matrix (Sigma)
+ * @param {number[]} y1 - First outcome (logit sens)
+ * @param {number[]} y2 - Second outcome (logit spec)
+ * @param {number[]} v1 - Within-study variance for y1
+ * @param {number[]} v2 - Within-study variance for y2
+ * @param {number} maxIter - Maximum iterations
+ * @param {number} tol - Convergence tolerance
+ * @returns {Object} REML estimates
+ */
+function bivariateREML(y1, y2, v1, v2, maxIter = 100, tol = 1e-6) {
+    const k = y1.length;
+    if (k < 3) return null;
+
+    // Initialize between-study variance-covariance matrix (Sigma)
+    // Using method of moments for starting values
+    const mean1 = y1.reduce((a, b) => a + b, 0) / k;
+    const mean2 = y2.reduce((a, b) => a + b, 0) / k;
+
+    let var1 = 0, var2 = 0, cov12 = 0;
+    for (let i = 0; i < k; i++) {
+        var1 += (y1[i] - mean1) ** 2;
+        var2 += (y2[i] - mean2) ** 2;
+        cov12 += (y1[i] - mean1) * (y2[i] - mean2);
+    }
+    var1 = Math.max(0.01, var1 / (k - 1) - v1.reduce((a, b) => a + b, 0) / k);
+    var2 = Math.max(0.01, var2 / (k - 1) - v2.reduce((a, b) => a + b, 0) / k);
+    cov12 = cov12 / (k - 1);
+
+    // Constrain correlation to [-0.95, 0.95]
+    const maxCov = 0.95 * Math.sqrt(var1 * var2);
+    cov12 = Math.max(-maxCov, Math.min(maxCov, cov12));
+
+    // Between-study covariance matrix (Sigma)
+    let Sigma = Matrix2x2.create(var1, cov12, cov12, var2);
+
+    // Iterative REML estimation (Fisher scoring)
+    for (let iter = 0; iter < maxIter; iter++) {
+        // Compute weights and weighted estimates
+        let sumW = Matrix2x2.create(0, 0, 0, 0);
+        let sumWy = [0, 0];
+
+        for (let i = 0; i < k; i++) {
+            // Total variance for study i: Vi = Si + Sigma
+            // Si = within-study variance (diagonal, assuming independence)
+            const Si = Matrix2x2.create(v1[i], 0, 0, v2[i]);
+            const Vi = Matrix2x2.add(Si, Sigma);
+            const Wi = Matrix2x2.inverse(Vi);
+
+            if (!Wi) continue;
+
+            sumW = Matrix2x2.add(sumW, Wi);
+            const wy = Matrix2x2.mulVec(Wi, [y1[i], y2[i]]);
+            sumWy[0] += wy[0];
+            sumWy[1] += wy[1];
+        }
+
+        // Weighted mean estimates
+        const sumWinv = Matrix2x2.inverse(sumW);
+        if (!sumWinv) break;
+
+        const mu = Matrix2x2.mulVec(sumWinv, sumWy);
+
+        // Update Sigma using method of moments (simplified)
+        let newVar1 = 0, newVar2 = 0, newCov = 0;
+        let totalW1 = 0, totalW2 = 0;
+
+        for (let i = 0; i < k; i++) {
+            const r1 = y1[i] - mu[0];
+            const r2 = y2[i] - mu[1];
+
+            const Si = Matrix2x2.create(v1[i], 0, 0, v2[i]);
+            const Vi = Matrix2x2.add(Si, Sigma);
+            const Wi = Matrix2x2.inverse(Vi);
+            if (!Wi) continue;
+
+            // Weighted residual contribution to variance
+            const w1 = 1 / (v1[i] + Sigma[0][0]);
+            const w2 = 1 / (v2[i] + Sigma[1][1]);
+
+            newVar1 += w1 * (r1 * r1 - v1[i]);
+            newVar2 += w2 * (r2 * r2 - v2[i]);
+            newCov += Math.sqrt(w1 * w2) * r1 * r2;
+
+            totalW1 += w1;
+            totalW2 += w2;
+        }
+
+        // Update estimates
+        const newSigma11 = Math.max(0.001, newVar1 / Math.max(1, totalW1 - 1));
+        const newSigma22 = Math.max(0.001, newVar2 / Math.max(1, totalW2 - 1));
+        const maxCovNew = 0.95 * Math.sqrt(newSigma11 * newSigma22);
+        const newSigma12 = Math.max(-maxCovNew, Math.min(maxCovNew,
+            newCov / Math.max(1, Math.sqrt(totalW1 * totalW2) - 1)));
+
+        const newSigma = Matrix2x2.create(newSigma11, newSigma12, newSigma12, newSigma22);
+
+        // Check convergence
+        const diff = Math.abs(newSigma[0][0] - Sigma[0][0]) +
+                    Math.abs(newSigma[1][1] - Sigma[1][1]) +
+                    Math.abs(newSigma[0][1] - Sigma[0][1]);
+
+        Sigma = newSigma;
+
+        if (diff < tol) break;
+    }
+
+    // Final weighted estimates with converged Sigma
+    let sumW = Matrix2x2.create(0, 0, 0, 0);
+    let sumWy = [0, 0];
+
+    for (let i = 0; i < k; i++) {
+        const Si = Matrix2x2.create(v1[i], 0, 0, v2[i]);
+        const Vi = Matrix2x2.add(Si, Sigma);
+        const Wi = Matrix2x2.inverse(Vi);
+        if (!Wi) continue;
+
+        sumW = Matrix2x2.add(sumW, Wi);
+        const wy = Matrix2x2.mulVec(Wi, [y1[i], y2[i]]);
+        sumWy[0] += wy[0];
+        sumWy[1] += wy[1];
+    }
+
+    const sumWinv = Matrix2x2.inverse(sumW);
+    if (!sumWinv) return null;
+
+    const mu = Matrix2x2.mulVec(sumWinv, sumWy);
+
+    // Standard errors from inverse of sum of weights
+    const se1 = safeSqrt(sumWinv[0][0]);
+    const se2 = safeSqrt(sumWinv[1][1]);
+
+    // Correlation from Sigma
+    const rho = Sigma[0][1] / safeSqrt(Sigma[0][0] * Sigma[1][1]);
+
+    return {
+        mu: mu,                    // [mu1, mu2] - pooled estimates on logit scale
+        se: [se1, se2],           // Standard errors
+        Sigma: Sigma,              // Between-study covariance matrix
+        covMu: sumWinv,           // Covariance matrix of mu estimates
+        tau2: [Sigma[0][0], Sigma[1][1]],  // Between-study variances
+        rho: rho,                  // Between-study correlation
+        k: k
+    };
+}
+
+/**
+ * Calculate confidence/prediction ellipse points for SROC plot
+ * @param {number} mu1 - Mean of first variable (logit sens)
+ * @param {number} mu2 - Mean of second variable (logit FPR)
+ * @param {Array} covMatrix - 2x2 covariance matrix
+ * @param {number} level - Confidence level (e.g., 0.95)
+ * @param {number} nPoints - Number of points on ellipse
+ * @returns {Array} Array of {sens, fpr} points
+ */
+function calculateEllipse(mu1, mu2, covMatrix, level = 0.95, nPoints = 100) {
+    // Chi-squared critical value for 2 df
+    const chiSq = -2 * Math.log(1 - level);
+
+    // Eigenvalue decomposition for ellipse orientation
+    const a = covMatrix[0][0];
+    const b = covMatrix[0][1];
+    const c = covMatrix[1][1];
+
+    const trace = a + c;
+    const det = a * c - b * b;
+
+    if (det <= 0) return [];
+
+    const lambda1 = (trace + safeSqrt(trace * trace - 4 * det)) / 2;
+    const lambda2 = (trace - safeSqrt(trace * trace - 4 * det)) / 2;
+
+    // Semi-axes
+    const axis1 = safeSqrt(chiSq * Math.max(0.001, lambda1));
+    const axis2 = safeSqrt(chiSq * Math.max(0.001, lambda2));
+
+    // Rotation angle
+    const theta = b !== 0 ? Math.atan2(lambda1 - a, b) : 0;
+
+    const points = [];
+    for (let i = 0; i < nPoints; i++) {
+        const t = (2 * Math.PI * i) / nPoints;
+
+        // Parametric ellipse
+        const x = axis1 * Math.cos(t);
+        const y = axis2 * Math.sin(t);
+
+        // Rotate
+        const xRot = x * Math.cos(theta) - y * Math.sin(theta);
+        const yRot = x * Math.sin(theta) + y * Math.cos(theta);
+
+        // Translate to center
+        const logitSens = mu1 + xRot;
+        const logitFpr = mu2 + yRot;
+
+        // Transform to probability scale
+        const sens = invLogit(logitSens);
+        const fpr = invLogit(logitFpr);
+
+        if (sens > 0 && sens < 1 && fpr > 0 && fpr < 1) {
+            points.push({ sens, fpr });
+        }
+    }
+
+    return points;
+}
+
 /**
  * Bivariate random effects model for DTA meta-analysis (Reitsma approach)
- * Jointly models logit(sensitivity) and logit(specificity)
+ * Now uses TRUE bivariate REML estimation
  * @param {Object[]} studyStats - Array of study statistics from calcStudyStats
  * @param {number} [zScore=1.96] - Z-score for confidence intervals
  * @returns {Object|null} Model results or null if insufficient data
@@ -1891,38 +2157,73 @@ function bivariateModel(studyStats, zScore = STAT_CONSTANTS.Z_95) {
     const varSens = studyStats.map(s => s.varSensLogit);
     const varSpec = studyStats.map(s => s.varSpecLogit);
 
-    // Univariate estimates first
-    const sensRE = univariateRE(sensLogits, varSens);
-    const specRE = univariateRE(specLogits, varSpec);
+    // For bivariate model, we model (logit_sens, logit_fpr) where fpr = 1 - spec
+    // logit(fpr) = logit(1-spec) = -logit(spec)
+    const fprLogits = specLogits.map(s => -s);
 
-    if (!sensRE || !specRE) return null;
+    // Try true bivariate REML first
+    const reml = bivariateREML(sensLogits, fprLogits, varSens, varSpec);
 
-    // Correlation between logit(sens) and logit(spec) across studies
-    const meanSens = sensLogits.reduce((a, b) => a + b, 0) / k;
-    const meanSpec = specLogits.reduce((a, b) => a + b, 0) / k;
+    // Also compute univariate for heterogeneity stats (I², Q)
+    const sensRE = univariateRE(sensLogits, varSens, zScore);
+    const specRE = univariateRE(specLogits, varSpec, zScore);
 
-    let sumProd = 0, sumSensSq = 0, sumSpecSq = 0;
-    for (let i = 0; i < k; i++) {
-        const ds = sensLogits[i] - meanSens;
-        const dc = specLogits[i] - meanSpec;
-        sumProd += ds * dc;
-        sumSensSq += ds * ds;
-        sumSpecSq += dc * dc;
+    if (!reml && !sensRE) return null;
+
+    // Use REML results if available, otherwise fall back to univariate
+    let pooledSensLogit, pooledFprLogit, seSens, seFpr, tau2Sens, tau2Fpr, correlation;
+    let covMatrix = null;
+    let predCovMatrix = null;
+
+    if (reml) {
+        pooledSensLogit = reml.mu[0];
+        pooledFprLogit = reml.mu[1];
+        seSens = reml.se[0];
+        seFpr = reml.se[1];
+        tau2Sens = reml.tau2[0];
+        tau2Fpr = reml.tau2[1];
+        correlation = reml.rho;
+        covMatrix = reml.covMu;  // Covariance matrix of estimates
+
+        // Prediction covariance (adds between-study variance)
+        predCovMatrix = Matrix2x2.add(covMatrix, reml.Sigma);
+    } else {
+        // Fallback to univariate
+        pooledSensLogit = sensRE.estimate;
+        pooledFprLogit = -specRE.estimate;  // logit(fpr) = -logit(spec)
+        seSens = sensRE.se;
+        seFpr = specRE.se;
+        tau2Sens = sensRE.tau2;
+        tau2Fpr = specRE.tau2;
+        correlation = null;
     }
 
-    // Fix division by zero: return null when correlation cannot be estimated
-    const denom = safeSqrt(sumSensSq * sumSpecSq);
-    const correlation = denom > 0 ? sumProd / denom : null;
-
     // Transform back to probability scale
-    const pooledSens = invLogit(sensRE.estimate);
-    const pooledSpec = invLogit(specRE.estimate);
+    const pooledSens = invLogit(pooledSensLogit);
+    const pooledSpec = invLogit(-pooledFprLogit);  // spec = 1 - fpr = invLogit(-logit_fpr)
 
     // CI on probability scale
-    const sensLower = invLogit(sensRE.ci[0]);
-    const sensUpper = invLogit(sensRE.ci[1]);
-    const specLower = invLogit(specRE.ci[0]);
-    const specUpper = invLogit(specRE.ci[1]);
+    const sensLower = invLogit(pooledSensLogit - zScore * seSens);
+    const sensUpper = invLogit(pooledSensLogit + zScore * seSens);
+    const specLower = invLogit(-pooledFprLogit - zScore * seFpr);
+    const specUpper = invLogit(-pooledFprLogit + zScore * seFpr);
+
+    // Prediction intervals: incorporate between-study variance (tau²)
+    const sensPredSE = safeSqrt(seSens * seSens + tau2Sens);
+    const specPredSE = safeSqrt(seFpr * seFpr + tau2Fpr);
+    const sensPredLower = invLogit(pooledSensLogit - zScore * sensPredSE);
+    const sensPredUpper = invLogit(pooledSensLogit + zScore * sensPredSE);
+    const specPredLower = invLogit(-pooledFprLogit - zScore * specPredSE);
+    const specPredUpper = invLogit(-pooledFprLogit + zScore * specPredSE);
+
+    // Calculate ellipse points for SROC plot
+    let confEllipse = null, predEllipse = null;
+    if (covMatrix) {
+        confEllipse = calculateEllipse(pooledSensLogit, pooledFprLogit, covMatrix, currentCILevel);
+        if (predCovMatrix) {
+            predEllipse = calculateEllipse(pooledSensLogit, pooledFprLogit, predCovMatrix, currentCILevel);
+        }
+    }
 
     // Likelihood ratios with protection against division by zero
     const oneMinusSpec = Math.max(STAT_CONSTANTS.LOGIT_BOUND_LOW, 1 - pooledSpec);
@@ -1932,61 +2233,44 @@ function bivariateModel(studyStats, zScore = STAT_CONSTANTS.Z_95) {
 
     const PLR = safeSens / oneMinusSpec;
     const NLR = oneMinusSens / safeSpec;
-
-    // DOR
     const DOR = PLR / NLR;
 
     // Proper log-scale CIs for likelihood ratios using delta method
     const logPLR = Math.log(PLR);
     const logNLR = Math.log(NLR);
-
-    // Variance on log scale for PLR: var(log(sens)) + var(log(1-spec))
-    const varLogSens = Math.pow(sensRE.se / safeSens, 2);
-    const varLogOneMinusSpec = Math.pow(specRE.se / oneMinusSpec, 2);
+    const varLogSens = Math.pow(seSens / safeSens, 2);
+    const varLogOneMinusSpec = Math.pow(seFpr / oneMinusSpec, 2);
     const logPLRSE = safeSqrt(varLogSens + varLogOneMinusSpec);
-
-    // Variance on log scale for NLR
-    const varLogOneMinusSens = Math.pow(sensRE.se / oneMinusSens, 2);
-    const varLogSpec = Math.pow(specRE.se / safeSpec, 2);
+    const varLogOneMinusSens = Math.pow(seSens / oneMinusSens, 2);
+    const varLogSpec = Math.pow(seFpr / safeSpec, 2);
     const logNLRSE = safeSqrt(varLogOneMinusSens + varLogSpec);
-
-    // DOR CI using log-scale variance
     const logDOR = Math.log(DOR);
     const logDORSE = safeSqrt(varLogSens + varLogOneMinusSpec + varLogOneMinusSens + varLogSpec);
-
-    // Prediction intervals: incorporate between-study variance (tau²)
-    // PI = estimate ± z * sqrt(SE² + tau²) on logit scale
-    const sensPredSE = safeSqrt(sensRE.se * sensRE.se + sensRE.tau2);
-    const specPredSE = safeSqrt(specRE.se * specRE.se + specRE.tau2);
-    const sensPredLower = invLogit(sensRE.estimate - zScore * sensPredSE);
-    const sensPredUpper = invLogit(sensRE.estimate + zScore * sensPredSE);
-    const specPredLower = invLogit(specRE.estimate - zScore * specPredSE);
-    const specPredUpper = invLogit(specRE.estimate + zScore * specPredSE);
 
     return {
         sensitivity: {
             estimate: pooledSens,
             ci: [sensLower, sensUpper],
-            pi: [sensPredLower, sensPredUpper],  // Prediction interval
-            se: sensRE.se,
-            logit: sensRE.estimate,
-            tau2: sensRE.tau2,
-            I2: sensRE.I2,
-            I2CI: sensRE.I2CI,  // I² confidence interval
-            Q: sensRE.Q,
-            pQ: sensRE.pQ
+            pi: [sensPredLower, sensPredUpper],
+            se: seSens,
+            logit: pooledSensLogit,
+            tau2: tau2Sens,
+            I2: sensRE ? sensRE.I2 : 0,
+            I2CI: sensRE ? sensRE.I2CI : [0, 0],
+            Q: sensRE ? sensRE.Q : 0,
+            pQ: sensRE ? sensRE.pQ : 1
         },
         specificity: {
             estimate: pooledSpec,
             ci: [specLower, specUpper],
-            pi: [specPredLower, specPredUpper],  // Prediction interval
-            se: specRE.se,
-            logit: specRE.estimate,
-            tau2: specRE.tau2,
-            I2: specRE.I2,
-            I2CI: specRE.I2CI,  // I² confidence interval
-            Q: specRE.Q,
-            pQ: specRE.pQ
+            pi: [specPredLower, specPredUpper],
+            se: seFpr,
+            logit: -pooledFprLogit,
+            tau2: tau2Fpr,
+            I2: specRE ? specRE.I2 : 0,
+            I2CI: specRE ? specRE.I2CI : [0, 0],
+            Q: specRE ? specRE.Q : 0,
+            pQ: specRE ? specRE.pQ : 1
         },
         PLR: {
             estimate: PLR,
@@ -2004,6 +2288,9 @@ function bivariateModel(studyStats, zScore = STAT_CONSTANTS.Z_95) {
                  Math.exp(logDOR + zScore * logDORSE)]
         },
         correlation,
+        confEllipse,    // Confidence ellipse points for SROC
+        predEllipse,    // Prediction ellipse points for SROC
+        covMatrix,      // Covariance matrix of estimates
         k,
         modelType: 'bivariate',
         ciLevel: currentCILevel
@@ -2289,41 +2576,184 @@ function univariateModel(studyStats, zScore = STAT_CONSTANTS.Z_95) {
     };
 }
 
-// SROC curve calculation (Moses-Littenberg approach)
+// ========================
+// META-REGRESSION
+// ========================
+
+/**
+ * Meta-regression for exploring sources of heterogeneity
+ * Tests whether a covariate explains variation in sensitivity or specificity
+ * @param {number[]} outcome - Outcome values (logit sens or logit spec)
+ * @param {number[]} variance - Within-study variances
+ * @param {number[]} covariate - Covariate values
+ * @param {number} tau2 - Between-study variance from base model
+ * @param {number} zScore - Z-score for CI
+ * @returns {Object} Meta-regression results
+ */
+function metaRegression(outcome, variance, covariate, tau2, zScore = STAT_CONSTANTS.Z_95) {
+    const n = outcome.length;
+    if (n < 4) return null;  // Need at least 4 studies for regression
+
+    // Weights incorporating between-study variance
+    const weights = variance.map(v => 1 / (v + tau2));
+    const sumW = weights.reduce((a, b) => a + b, 0);
+
+    // Weighted means
+    const meanY = weights.reduce((s, w, i) => s + w * outcome[i], 0) / sumW;
+    const meanX = weights.reduce((s, w, i) => s + w * covariate[i], 0) / sumW;
+
+    // Weighted regression coefficients
+    let sumWXX = 0, sumWXY = 0;
+    for (let i = 0; i < n; i++) {
+        const dx = covariate[i] - meanX;
+        sumWXX += weights[i] * dx * dx;
+        sumWXY += weights[i] * dx * (outcome[i] - meanY);
+    }
+
+    if (sumWXX === 0) return null;
+
+    const beta1 = sumWXY / sumWXX;  // Slope
+    const beta0 = meanY - beta1 * meanX;  // Intercept
+
+    // Residuals and residual heterogeneity
+    let ssRes = 0;
+    for (let i = 0; i < n; i++) {
+        const predicted = beta0 + beta1 * covariate[i];
+        const residual = outcome[i] - predicted;
+        ssRes += weights[i] * residual * residual;
+    }
+
+    // Variance of slope
+    const varBeta1 = 1 / sumWXX;
+    const seBeta1 = safeSqrt(varBeta1);
+
+    // Test statistic for slope
+    const zBeta = beta1 / seBeta1;
+    const pValue = 2 * (1 - normalCDF(Math.abs(zBeta)));
+
+    // R² analog: proportion of heterogeneity explained
+    // Compare Q_residual to Q_total
+    const qTotal = weights.reduce((s, w, i) => s + w * Math.pow(outcome[i] - meanY, 2), 0);
+    const r2 = qTotal > 0 ? Math.max(0, 1 - ssRes / qTotal) : 0;
+
+    // Residual tau² (simplified estimation)
+    const tau2Residual = Math.max(0, (ssRes - (n - 2)) / (sumW - sumWXX / sumW));
+
+    return {
+        intercept: beta0,
+        slope: beta1,
+        slopeCI: [beta1 - zScore * seBeta1, beta1 + zScore * seBeta1],
+        slopeSE: seBeta1,
+        z: zBeta,
+        pValue: pValue,
+        r2: r2 * 100,  // Percentage of heterogeneity explained
+        tau2Residual: tau2Residual,
+        n: n
+    };
+}
+
+/**
+ * Standard normal CDF approximation
+ */
+function normalCDF(x) {
+    const a1 = 0.254829592;
+    const a2 = -0.284496736;
+    const a3 = 1.421413741;
+    const a4 = -1.453152027;
+    const a5 = 1.061405429;
+    const p = 0.3275911;
+
+    const sign = x < 0 ? -1 : 1;
+    x = Math.abs(x) / Math.sqrt(2);
+
+    const t = 1.0 / (1.0 + p * x);
+    const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+
+    return 0.5 * (1.0 + sign * y);
+}
+
+/**
+ * Run meta-regression for both sensitivity and specificity
+ * @param {Object[]} studyStats - Study statistics
+ * @param {number[]} covariate - Covariate values (must match study order)
+ * @param {string} covariateName - Name of the covariate
+ * @returns {Object} Meta-regression results for sens and spec
+ */
+function runMetaRegression(studyStats, covariate, covariateName = 'Covariate') {
+    if (!covariate || covariate.length !== studyStats.length) {
+        return null;
+    }
+
+    // Get baseline tau² from univariate models
+    const sensLogits = studyStats.map(s => s.sensLogit);
+    const specLogits = studyStats.map(s => s.specLogit);
+    const varSens = studyStats.map(s => s.varSensLogit);
+    const varSpec = studyStats.map(s => s.varSpecLogit);
+
+    const sensBase = univariateRE(sensLogits, varSens);
+    const specBase = univariateRE(specLogits, varSpec);
+
+    if (!sensBase || !specBase) return null;
+
+    const sensReg = metaRegression(sensLogits, varSens, covariate, sensBase.tau2);
+    const specReg = metaRegression(specLogits, varSpec, covariate, specBase.tau2);
+
+    return {
+        covariateName,
+        sensitivity: sensReg,
+        specificity: specReg
+    };
+}
+
+// Store meta-regression results globally
+let metaRegressionResults = null;
+
+// SROC curve calculation (Moses-Littenberg approach with inverse-variance weighting)
 function calcSROC(studyStats) {
     const k = studyStats.length;
     if (k < 2) return null;
-    
-    // D = logit(sens) + logit(spec), S = logit(sens) - logit(spec)
+
+    // D = logit(sens) + logit(spec) ≈ log(DOR), S = logit(sens) - logit(spec) (threshold)
     const D = studyStats.map(s => s.sensLogit + s.specLogit);
     const S = studyStats.map(s => s.sensLogit - s.specLogit);
-    
-    // Regression: D on S (or S on D)
-    const meanD = D.reduce((a, b) => a + b, 0) / k;
-    const meanS = S.reduce((a, b) => a + b, 0) / k;
-    
-    let sumSD = 0, sumSS = 0;
+
+    // Variance of D (accuracy) - for weighting
+    const varD = studyStats.map(s => s.varSensLogit + s.varSpecLogit);
+
+    // Inverse-variance weights
+    const weights = varD.map(v => v > 0 ? 1 / v : 1);
+    const sumW = weights.reduce((a, b) => a + b, 0);
+
+    // Weighted means
+    const meanD = weights.reduce((s, w, i) => s + w * D[i], 0) / sumW;
+    const meanS = weights.reduce((s, w, i) => s + w * S[i], 0) / sumW;
+
+    // Weighted regression: D on S
+    let sumWSD = 0, sumWSS = 0;
     for (let i = 0; i < k; i++) {
-        sumSD += (S[i] - meanS) * (D[i] - meanD);
-        sumSS += (S[i] - meanS) * (S[i] - meanS);
+        const w = weights[i];
+        sumWSD += w * (S[i] - meanS) * (D[i] - meanD);
+        sumWSS += w * (S[i] - meanS) * (S[i] - meanS);
     }
-    
-    const beta = sumSS > 0 ? sumSD / sumSS : 0;
+
+    const beta = sumWSS > 0 ? sumWSD / sumWSS : 0;
     const alpha = meanD - beta * meanS;
-    
+
+    // Standard error of alpha (intercept)
+    const seAlpha = safeSqrt(1 / sumW + meanS * meanS / sumWSS);
+
     // Generate SROC curve points
     const srocPoints = [];
     for (let fpr = 0.01; fpr <= 0.99; fpr += 0.01) {
         const specLogit = logit(1 - fpr);
-        // From the symmetric model: sensLogit = (alpha + (1-beta)*specLogit) / (1+beta)
-        // Simplified: when beta ≈ 0 (symmetric), sensLogit ≈ (alpha/2) + specLogit
-        const sensLogit = (alpha - (1 - beta) * specLogit) / (1 + beta);
+        // Moses-Littenberg transformation
+        const sensLogit = (alpha - (1 - beta) * specLogit) / (1 + Math.abs(beta));
         const sens = invLogit(sensLogit);
-        if (sens > 0 && sens < 1) {
+        if (sens > 0.001 && sens < 0.999) {
             srocPoints.push({ fpr, sens });
         }
     }
-    
+
     // AUC approximation using trapezoidal rule
     let auc = 0;
     for (let i = 1; i < srocPoints.length; i++) {
@@ -2331,20 +2761,38 @@ function calcSROC(studyStats) {
         const avgSens = (srocPoints[i].sens + srocPoints[i-1].sens) / 2;
         auc += dx * avgSens;
     }
-    
+
+    // AUC standard error approximation (Hanley-McNeil)
+    const seAUC = safeSqrt(auc * (1 - auc) / k);
+
     // Q* index (where sens = spec on SROC)
     const qStar = invLogit(alpha / 2);
-    
+
     // D-prime (discriminability index)
     const dPrime = alpha / Math.sqrt(2);
-    
+
+    // Partial AUC (for FPR 0-0.2, clinically relevant range)
+    let partialAUC = 0;
+    const partialPoints = srocPoints.filter(p => p.fpr <= 0.2);
+    for (let i = 1; i < partialPoints.length; i++) {
+        const dx = partialPoints[i].fpr - partialPoints[i-1].fpr;
+        const avgSens = (partialPoints[i].sens + partialPoints[i-1].sens) / 2;
+        partialAUC += dx * avgSens;
+    }
+    // Normalize to 0-1 range
+    partialAUC = partialAUC / 0.2;
+
     return {
         points: srocPoints,
         alpha,
         beta,
+        seAlpha,
         auc: Math.max(0.5, Math.min(1, auc)),
+        aucCI: [Math.max(0.5, auc - 1.96 * seAUC), Math.min(1, auc + 1.96 * seAUC)],
+        partialAUC: Math.max(0, Math.min(1, partialAUC)),
         qStar,
-        dPrime
+        dPrime,
+        weighted: true
     };
 }
 
@@ -3164,28 +3612,51 @@ function plotSROC() {
         hovertemplate: '<b>Summary</b><br>FPR: %{x:.1f}%<br>Sens: %{y:.1f}%<extra></extra>'
     });
     
-    // Confidence/Prediction ellipse (simplified)
-    if (regionType === 'confidence' || regionType === 'both') {
-        const ellipse = generateEllipse(
-            sumFPR, sumSens,
-            5, 5, // Semi-axes (simplified)
-            0, // Rotation
-            'Confidence'
-        );
+    // Confidence ellipse from bivariate model
+    if ((regionType === 'confidence' || regionType === 'both') && results.model.confEllipse) {
+        const confPoints = results.model.confEllipse;
+        if (confPoints.length > 0) {
+            traces.push({
+                type: 'scatter',
+                mode: 'lines',
+                name: `${Math.round(currentCILevel * 100)}% Confidence Region`,
+                x: confPoints.map(p => p.fpr * 100),
+                y: confPoints.map(p => p.sens * 100),
+                line: { color: c.accent, width: 2 },
+                fill: 'toself',
+                fillcolor: 'rgba(3, 105, 161, 0.15)',
+                hoverinfo: 'skip'
+            });
+        }
+    } else if (regionType === 'confidence' || regionType === 'both') {
+        // Fallback: simplified ellipse if no bivariate model
+        const ellipse = generateEllipse(sumFPR, sumSens, 5, 5, 0, 'Confidence');
         traces.push({
             ...ellipse,
             line: { color: c.accent, width: 2 },
             fillcolor: 'rgba(3, 105, 161, 0.1)'
         });
     }
-    
-    if (regionType === 'prediction' || regionType === 'both') {
-        const ellipse = generateEllipse(
-            sumFPR, sumSens,
-            12, 12,
-            0,
-            'Prediction'
-        );
+
+    // Prediction ellipse from bivariate model
+    if ((regionType === 'prediction' || regionType === 'both') && results.model.predEllipse) {
+        const predPoints = results.model.predEllipse;
+        if (predPoints.length > 0) {
+            traces.push({
+                type: 'scatter',
+                mode: 'lines',
+                name: `${Math.round(currentCILevel * 100)}% Prediction Region`,
+                x: predPoints.map(p => p.fpr * 100),
+                y: predPoints.map(p => p.sens * 100),
+                line: { color: c.danger, width: 2, dash: 'dash' },
+                fill: 'toself',
+                fillcolor: 'rgba(220, 38, 38, 0.08)',
+                hoverinfo: 'skip'
+            });
+        }
+    } else if (regionType === 'prediction' || regionType === 'both') {
+        // Fallback: simplified ellipse
+        const ellipse = generateEllipse(sumFPR, sumSens, 12, 12, 0, 'Prediction');
         traces.push({
             ...ellipse,
             line: { color: c.accent, width: 1, dash: 'dot' },

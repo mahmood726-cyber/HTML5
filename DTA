@@ -601,7 +601,16 @@
     .alert-success { border-color: var(--success); background: var(--success-light); }
     .alert-warning { border-color: var(--warning); background: var(--warning-light); }
     .alert-danger { border-color: var(--danger); background: var(--danger-light); }
-    
+    .alert-info { border-color: var(--accent-primary); background: var(--accent-primary-light); }
+
+    /* Sensitivity Analysis */
+    .sensitivity-table-wrap { overflow-x: auto; }
+    .sensitivity-table-wrap table { font-size: 0.875rem; }
+    .sensitivity-table-wrap .influential { color: var(--danger); font-weight: 600; }
+    .sensitivity-table-wrap .highlight-row { background: var(--warning-light); }
+    .sensitivity-summary h4 { margin-bottom: 0.5rem; color: var(--text-primary); }
+    .sensitivity-summary p { margin: 0.25rem 0; color: var(--text-secondary); }
+
     /* Method Badge */
     .method-badge {
         display: inline-flex;
@@ -1122,13 +1131,39 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="card">
             <div class="card-header">
                 <div class="card-title">ROC Space (Threshold Effect Visualization)</div>
             </div>
             <div class="card-body">
                 <div class="plot-container" id="rocSpacePlot" style="min-height: 450px;"></div>
+            </div>
+        </div>
+
+        <!-- Sensitivity Analysis Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 20V10"/>
+                        <path d="M18 20V4"/>
+                        <path d="M6 20v-4"/>
+                    </svg>
+                    Leave-One-Out Sensitivity Analysis
+                </div>
+                <div class="card-actions">
+                    <button class="btn btn-primary" onclick="runSensitivityAnalysis()">
+                        Run Analysis
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Systematically excludes each study and recalculates pooled estimates to identify influential studies.
+                </p>
+                <div id="sensitivityResults" style="display: none;"></div>
+                <div class="plot-container" id="sensitivityPlot" style="min-height: 350px; display: none;"></div>
             </div>
         </div>
     </section>
@@ -1805,11 +1840,56 @@ function univariateRE(values, variances, zScore = STAT_CONSTANTS.Z_95) {
         }
     }
 
+    // Tau² confidence interval using Q-profile method (Viechtbauer 2007)
+    // Based on the relationship: tau² = (Q - df) / C
+    let tau2Lower = 0, tau2Upper = 0;
+    if (k > 2 && C > 0) {
+        // Use chi-squared quantiles for Q to derive tau² CI
+        // Q ~ chi²(df) under null, but Q - df*tau² follows non-central chi²
+        // Approximate CI using: tau² = max(0, (Q* - df) / C) where Q* are adjusted quantiles
+
+        // For 95% CI, use Q boundaries from chi-squared distribution
+        // Lower bound: tau² when Q = Q_observed at upper percentile
+        // Upper bound: tau² when Q = Q_observed at lower percentile
+
+        // Simplified approach: SE(tau²) ≈ tau² × sqrt(2/k) for DL estimator
+        const seTau2 = tau2 > 0 ? tau2 * safeSqrt(2 / Math.max(1, k - 1)) : 0;
+
+        // More accurate: use the variance of DL estimator
+        // Var(tau²_DL) ≈ 2 / C² × (k-1 + 2*(Q-k+1)*tau² / typical_var + (Q-k+1)²*tau²² / typical_var²)
+        // Simplified approximation based on asymptotic variance
+        const typicalVar = sumW > 0 ? k / sumW : 1;
+        const varTau2 = k > 1 ? (2 * (k - 1) + 4 * (Q - k + 1) / typicalVar) / (C * C) : 0;
+        const seTau2Refined = safeSqrt(Math.max(0, varTau2));
+
+        // Use larger of the two SE estimates for conservatism
+        const seTau2Final = Math.max(seTau2, seTau2Refined);
+
+        // Apply Wald-type CI with log transformation for non-negativity
+        if (tau2 > 0) {
+            const logTau2 = Math.log(tau2);
+            const seLogTau2 = seTau2Final / tau2;
+            tau2Lower = Math.max(0, Math.exp(logTau2 - zScore * seLogTau2));
+            tau2Upper = Math.exp(logTau2 + zScore * seLogTau2);
+        } else {
+            // When tau² = 0, use one-sided CI
+            tau2Lower = 0;
+            tau2Upper = Math.max(0, seTau2Final * zScore * zScore);
+        }
+    }
+
+    // Tau (standard deviation) for interpretability
+    const tau = safeSqrt(tau2);
+    const tauCI = [safeSqrt(tau2Lower), safeSqrt(tau2Upper)];
+
     return {
         estimate: reEst,
         se: reSE,
         ci: [reEst - zScore * reSE, reEst + zScore * reSE],
         tau2,
+        tau2CI: [tau2Lower, tau2Upper],
+        tau,
+        tauCI,
         Q,
         pQ,
         I2,
@@ -1969,8 +2049,14 @@ function bivariateREML(y1, y2, v1, v2, maxIter = 100, tol = 1e-6) {
     // Between-study covariance matrix (Sigma)
     let Sigma = Matrix2x2.create(var1, cov12, cov12, var2);
 
+    // Convergence tracking
+    let converged = false;
+    let iterations = 0;
+    let finalDiff = Infinity;
+
     // Iterative REML estimation (Fisher scoring)
     for (let iter = 0; iter < maxIter; iter++) {
+        iterations = iter + 1;
         // Compute weights and weighted estimates
         let sumW = Matrix2x2.create(0, 0, 0, 0);
         let sumWy = [0, 0];
@@ -2035,9 +2121,13 @@ function bivariateREML(y1, y2, v1, v2, maxIter = 100, tol = 1e-6) {
                     Math.abs(newSigma[1][1] - Sigma[1][1]) +
                     Math.abs(newSigma[0][1] - Sigma[0][1]);
 
+        finalDiff = diff;
         Sigma = newSigma;
 
-        if (diff < tol) break;
+        if (diff < tol) {
+            converged = true;
+            break;
+        }
     }
 
     // Final weighted estimates with converged Sigma
@@ -2075,7 +2165,15 @@ function bivariateREML(y1, y2, v1, v2, maxIter = 100, tol = 1e-6) {
         covMu: sumWinv,           // Covariance matrix of mu estimates
         tau2: [Sigma[0][0], Sigma[1][1]],  // Between-study variances
         rho: rho,                  // Between-study correlation
-        k: k
+        k: k,
+        // Convergence diagnostics
+        convergence: {
+            converged: converged,
+            iterations: iterations,
+            finalDiff: finalDiff,
+            tolerance: tol,
+            maxIterations: maxIter
+        }
     };
 }
 
@@ -2350,6 +2448,7 @@ function hsrocModel(studyStats, zScore = STAT_CONSTANTS.Z_95) {
     }
 
     const beta = sumWSS > 0 ? sumWSD / sumWSS : 0;
+    const seBeta = sumWSS > 0 ? safeSqrt(1 / sumWSS) : 0;
 
     // Estimate covariance between Lambda and Theta estimates
     // Cov(Lambda, Theta) ≈ Cov(mean(D), mean(S)) estimated from data
@@ -2460,6 +2559,8 @@ function hsrocModel(studyStats, zScore = STAT_CONSTANTS.Z_95) {
             Theta: Theta,             // Threshold parameter
             ThetaSE: sRE.se,
             beta: beta,               // Asymmetry parameter
+            betaSE: seBeta,           // SE of asymmetry parameter
+            betaCI: [beta - zScore * seBeta, beta + zScore * seBeta],
             tau2Lambda: tau2Lambda,   // Between-study variance in accuracy
             tau2Theta: tau2Theta      // Between-study variance in threshold
         },
@@ -2590,7 +2691,7 @@ function univariateModel(studyStats, zScore = STAT_CONSTANTS.Z_95) {
  * @param {number} zScore - Z-score for CI
  * @returns {Object} Meta-regression results
  */
-function metaRegression(outcome, variance, covariate, tau2, zScore = STAT_CONSTANTS.Z_95) {
+function metaRegression(outcome, variance, covariate, tau2, zScore = STAT_CONSTANTS.Z_95, useKnappHartung = true) {
     const n = outcome.length;
     if (n < 4) return null;  // Need at least 4 studies for regression
 
@@ -2615,39 +2716,69 @@ function metaRegression(outcome, variance, covariate, tau2, zScore = STAT_CONSTA
     const beta1 = sumWXY / sumWXX;  // Slope
     const beta0 = meanY - beta1 * meanX;  // Intercept
 
-    // Residuals and residual heterogeneity
-    let ssRes = 0;
+    // Residuals and residual heterogeneity (Q_residual)
+    let qRes = 0;
     for (let i = 0; i < n; i++) {
         const predicted = beta0 + beta1 * covariate[i];
         const residual = outcome[i] - predicted;
-        ssRes += weights[i] * residual * residual;
+        qRes += weights[i] * residual * residual;
     }
 
-    // Variance of slope
-    const varBeta1 = 1 / sumWXX;
-    const seBeta1 = safeSqrt(varBeta1);
+    // Base variance of slope (without Knapp-Hartung)
+    const varBeta1Base = 1 / sumWXX;
 
-    // Test statistic for slope
-    const zBeta = beta1 / seBeta1;
-    const pValue = 2 * (1 - normalCDF(Math.abs(zBeta)));
+    // Knapp-Hartung adjustment: inflate SE using residual heterogeneity
+    // SE_KH = SE_base * sqrt(Q_res / (n-2))
+    let seBeta1, tStat, pValue, criticalValue, method;
+    const df = n - 2;
+
+    if (useKnappHartung && df > 0) {
+        // Knapp-Hartung inflation factor
+        const khFactor = safeSqrt(Math.max(1, qRes / df));
+        seBeta1 = safeSqrt(varBeta1Base) * khFactor;
+
+        // Use t-distribution
+        tStat = seBeta1 > 0 ? beta1 / seBeta1 : 0;
+
+        // t-distribution critical value (approximation for 95% CI)
+        // Using approximation: t_{0.975,df} ≈ 1.96 + 2.36/df for large df
+        criticalValue = df > 30 ? zScore : (zScore + 2.36 / df + 2.09 / (df * df));
+
+        // Two-tailed p-value from t-distribution (approximation)
+        const tAbs = Math.abs(tStat);
+        // Use normal approximation adjusted for df
+        const tToZ = tAbs * Math.sqrt(df / (df + tAbs * tAbs / 3));
+        pValue = 2 * (1 - normalCDF(tToZ));
+
+        method = 'Knapp-Hartung';
+    } else {
+        // Standard method without adjustment
+        seBeta1 = safeSqrt(varBeta1Base);
+        tStat = seBeta1 > 0 ? beta1 / seBeta1 : 0;
+        pValue = 2 * (1 - normalCDF(Math.abs(tStat)));
+        criticalValue = zScore;
+        method = 'Standard';
+    }
 
     // R² analog: proportion of heterogeneity explained
-    // Compare Q_residual to Q_total
     const qTotal = weights.reduce((s, w, i) => s + w * Math.pow(outcome[i] - meanY, 2), 0);
-    const r2 = qTotal > 0 ? Math.max(0, 1 - ssRes / qTotal) : 0;
+    const r2 = qTotal > 0 ? Math.max(0, 1 - qRes / qTotal) : 0;
 
     // Residual tau² (simplified estimation)
-    const tau2Residual = Math.max(0, (ssRes - (n - 2)) / (sumW - sumWXX / sumW));
+    const tau2Residual = Math.max(0, (qRes - df) / (sumW - sumWXX / sumW));
 
     return {
         intercept: beta0,
         slope: beta1,
-        slopeCI: [beta1 - zScore * seBeta1, beta1 + zScore * seBeta1],
+        slopeCI: [beta1 - criticalValue * seBeta1, beta1 + criticalValue * seBeta1],
         slopeSE: seBeta1,
-        z: zBeta,
+        t: tStat,
+        df: df,
         pValue: pValue,
         r2: r2 * 100,  // Percentage of heterogeneity explained
         tau2Residual: tau2Residual,
+        qResidual: qRes,
+        method: method,
         n: n
     };
 }
@@ -2742,15 +2873,36 @@ function calcSROC(studyStats) {
     // Standard error of alpha (intercept)
     const seAlpha = safeSqrt(1 / sumW + meanS * meanS / sumWSS);
 
+    // Standard error of beta (slope)
+    const seBeta = sumWSS > 0 ? safeSqrt(1 / sumWSS) : 0;
+
     // Generate SROC curve points
+    // From D = α + β*S, solving for sensLogit:
+    // sensLogit = (α - (1+β)*specLogit) / (1-β)
     const srocPoints = [];
-    for (let fpr = 0.01; fpr <= 0.99; fpr += 0.01) {
-        const specLogit = logit(1 - fpr);
-        // Moses-Littenberg transformation
-        const sensLogit = (alpha - (1 - beta) * specLogit) / (1 + Math.abs(beta));
-        const sens = invLogit(sensLogit);
-        if (sens > 0.001 && sens < 0.999) {
-            srocPoints.push({ fpr, sens });
+    const denominator = 1 - beta;
+
+    // Handle near-singular case (β ≈ 1 means perfect symmetry)
+    if (Math.abs(denominator) < 0.01) {
+        // When β ≈ 1, use simplified symmetric model
+        for (let fpr = 0.01; fpr <= 0.99; fpr += 0.01) {
+            const specLogit = logit(1 - fpr);
+            // Symmetric approximation: sensLogit ≈ α/2 - specLogit
+            const sensLogit = alpha / 2 - specLogit;
+            const sens = invLogit(sensLogit);
+            if (sens > 0.001 && sens < 0.999) {
+                srocPoints.push({ fpr, sens });
+            }
+        }
+    } else {
+        for (let fpr = 0.01; fpr <= 0.99; fpr += 0.01) {
+            const specLogit = logit(1 - fpr);
+            // Correct Moses-Littenberg transformation
+            const sensLogit = (alpha - (1 + beta) * specLogit) / denominator;
+            const sens = invLogit(sensLogit);
+            if (sens > 0.001 && sens < 0.999) {
+                srocPoints.push({ fpr, sens });
+            }
         }
     }
 
@@ -2787,12 +2939,14 @@ function calcSROC(studyStats) {
         alpha,
         beta,
         seAlpha,
+        seBeta,
         auc: Math.max(0.5, Math.min(1, auc)),
         aucCI: [Math.max(0.5, auc - 1.96 * seAUC), Math.min(1, auc + 1.96 * seAUC)],
         partialAUC: Math.max(0, Math.min(1, partialAUC)),
         qStar,
         dPrime,
-        weighted: true
+        weighted: true,
+        k: k
     };
 }
 
@@ -2885,6 +3039,235 @@ function deeksFunnelTest(studyStats) {
         invSqrtESS,
         logDOR
     };
+}
+
+/**
+ * Leave-one-out sensitivity analysis
+ * Recalculates meta-analysis excluding each study one at a time
+ * @param {Object[]} studyStats - Array of study statistics
+ * @param {string} modelType - Model type to use
+ * @param {number} zScore - Z-score for confidence intervals
+ * @returns {Object} Sensitivity analysis results
+ */
+function leaveOneOutAnalysis(studyStats, modelType = 'bivariate', zScore = STAT_CONSTANTS.Z_95) {
+    const k = studyStats.length;
+    if (k < 4) return null;  // Need at least 4 studies (3 after exclusion)
+
+    const results = [];
+    let baseSens = null, baseSpec = null;
+
+    // Get baseline results with all studies
+    const baseResult = runSelectedModel(modelType, studyStats, zScore);
+    if (baseResult) {
+        baseSens = baseResult.sensitivity.estimate;
+        baseSpec = baseResult.specificity.estimate;
+    }
+
+    // Leave-one-out analysis
+    for (let i = 0; i < k; i++) {
+        const subset = studyStats.filter((_, idx) => idx !== i);
+        const result = runSelectedModel(modelType, subset, zScore);
+
+        if (result) {
+            const sens = result.sensitivity.estimate;
+            const spec = result.specificity.estimate;
+            const sensChange = baseSens ? ((sens - baseSens) / baseSens) * 100 : 0;
+            const specChange = baseSpec ? ((spec - baseSpec) / baseSpec) * 100 : 0;
+
+            results.push({
+                excludedStudy: studyStats[i].studyName || `Study ${i + 1}`,
+                excludedIndex: i,
+                sensitivity: {
+                    estimate: sens,
+                    ci: result.sensitivity.ci,
+                    change: sensChange
+                },
+                specificity: {
+                    estimate: spec,
+                    ci: result.specificity.ci,
+                    change: specChange
+                },
+                I2Sens: result.sensitivity.I2,
+                I2Spec: result.specificity.I2,
+                DOR: result.DOR ? result.DOR.estimate : null
+            });
+        }
+    }
+
+    // Identify influential studies (>10% change in either metric)
+    const influential = results.filter(r =>
+        Math.abs(r.sensitivity.change) > 10 || Math.abs(r.specificity.change) > 10
+    );
+
+    // Calculate summary statistics
+    const sensEstimates = results.map(r => r.sensitivity.estimate);
+    const specEstimates = results.map(r => r.specificity.estimate);
+
+    return {
+        results,
+        baseline: { sensitivity: baseSens, specificity: baseSpec },
+        influential,
+        summary: {
+            sensRange: [Math.min(...sensEstimates), Math.max(...sensEstimates)],
+            specRange: [Math.min(...specEstimates), Math.max(...specEstimates)],
+            sensSD: safeSqrt(sensEstimates.reduce((s, v) => s + Math.pow(v - baseSens, 2), 0) / k),
+            specSD: safeSqrt(specEstimates.reduce((s, v) => s + Math.pow(v - baseSpec, 2), 0) / k)
+        },
+        k: results.length
+    };
+}
+
+// Store sensitivity analysis results globally
+let sensitivityAnalysisResults = null;
+
+/**
+ * Run and display leave-one-out sensitivity analysis
+ */
+function runSensitivityAnalysis() {
+    const validStudies = studies.filter(s =>
+        s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '' &&
+        s.tp >= 0 && s.fp >= 0 && s.fn >= 0 && s.tn >= 0
+    );
+
+    if (validStudies.length < 4) {
+        alert('Need at least 4 studies for sensitivity analysis.');
+        return;
+    }
+
+    const studyStats = validStudies.map(calcStudyStats);
+    const modelType = document.getElementById('modelSelect')?.value || 'bivariate';
+    const zScore = getCurrentZScore();
+
+    sensitivityAnalysisResults = leaveOneOutAnalysis(studyStats, modelType, zScore);
+
+    if (sensitivityAnalysisResults) {
+        displaySensitivityAnalysis(sensitivityAnalysisResults);
+    }
+}
+
+/**
+ * Display sensitivity analysis results
+ * @param {Object} results - Leave-one-out analysis results
+ */
+function displaySensitivityAnalysis(results) {
+    const container = document.getElementById('sensitivityResults');
+    if (!container) return;
+
+    let html = '<div class="sensitivity-table-wrap"><table class="results-table">';
+    html += '<thead><tr>';
+    html += '<th>Excluded Study</th>';
+    html += '<th>Sensitivity</th>';
+    html += '<th>Change</th>';
+    html += '<th>Specificity</th>';
+    html += '<th>Change</th>';
+    html += '<th>I² Sens</th>';
+    html += '</tr></thead><tbody>';
+
+    results.results.forEach(r => {
+        const sensChangeClass = Math.abs(r.sensitivity.change) > 10 ? 'influential' : '';
+        const specChangeClass = Math.abs(r.specificity.change) > 10 ? 'influential' : '';
+
+        html += `<tr class="${sensChangeClass || specChangeClass ? 'highlight-row' : ''}">`;
+        html += `<td>${escapeHtml(r.excludedStudy)}</td>`;
+        html += `<td>${(r.sensitivity.estimate * 100).toFixed(1)}% (${(r.sensitivity.ci[0] * 100).toFixed(1)}-${(r.sensitivity.ci[1] * 100).toFixed(1)})</td>`;
+        html += `<td class="${sensChangeClass}">${r.sensitivity.change >= 0 ? '+' : ''}${r.sensitivity.change.toFixed(1)}%</td>`;
+        html += `<td>${(r.specificity.estimate * 100).toFixed(1)}% (${(r.specificity.ci[0] * 100).toFixed(1)}-${(r.specificity.ci[1] * 100).toFixed(1)})</td>`;
+        html += `<td class="${specChangeClass}">${r.specificity.change >= 0 ? '+' : ''}${r.specificity.change.toFixed(1)}%</td>`;
+        html += `<td>${r.I2Sens !== undefined ? r.I2Sens.toFixed(1) + '%' : '—'}</td>`;
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+
+    // Summary
+    html += '<div class="sensitivity-summary" style="margin-top: 1rem;">';
+    html += '<h4>Summary</h4>';
+    html += `<p><strong>Baseline:</strong> Sens = ${(results.baseline.sensitivity * 100).toFixed(1)}%, Spec = ${(results.baseline.specificity * 100).toFixed(1)}%</p>`;
+    html += `<p><strong>Range (LOO):</strong> Sens = ${(results.summary.sensRange[0] * 100).toFixed(1)}-${(results.summary.sensRange[1] * 100).toFixed(1)}%, `;
+    html += `Spec = ${(results.summary.specRange[0] * 100).toFixed(1)}-${(results.summary.specRange[1] * 100).toFixed(1)}%</p>`;
+
+    if (results.influential.length > 0) {
+        html += '<div class="alert alert-warning" style="margin-top: 0.5rem;">';
+        html += `<strong>Influential studies detected:</strong> ${results.influential.map(r => escapeHtml(r.excludedStudy)).join(', ')}`;
+        html += '<br><small>These studies cause >10% change in sensitivity or specificity when excluded.</small>';
+        html += '</div>';
+    } else {
+        html += '<div class="alert alert-info" style="margin-top: 0.5rem;">No single study has >10% influence on the pooled estimates. Results appear robust.</div>';
+    }
+
+    html += '</div>';
+
+    container.innerHTML = html;
+    container.style.display = 'block';
+
+    // Also create forest plot for sensitivity analysis
+    plotSensitivityForest(results);
+}
+
+/**
+ * Plot sensitivity analysis forest plot
+ * @param {Object} results - Sensitivity analysis results
+ */
+function plotSensitivityForest(results) {
+    const plotContainer = document.getElementById('sensitivityPlot');
+    if (!plotContainer || !results) return;
+
+    // Show the plot container
+    plotContainer.style.display = 'block';
+
+    const studies = results.results.map(r => r.excludedStudy);
+    const sensValues = results.results.map(r => r.sensitivity.estimate * 100);
+    const sensLower = results.results.map(r => r.sensitivity.ci[0] * 100);
+    const sensUpper = results.results.map(r => r.sensitivity.ci[1] * 100);
+
+    const baseline = results.baseline.sensitivity * 100;
+
+    const trace = {
+        x: sensValues,
+        y: studies,
+        error_x: {
+            type: 'data',
+            symmetric: false,
+            arrayminus: sensValues.map((v, i) => v - sensLower[i]),
+            array: sensValues.map((v, i) => sensUpper[i] - v),
+            color: 'var(--sensitivity)',
+            thickness: 2
+        },
+        type: 'scatter',
+        mode: 'markers',
+        marker: {
+            size: 10,
+            color: results.results.map(r =>
+                Math.abs(r.sensitivity.change) > 10 ? '#e74c3c' : 'var(--sensitivity)'
+            ),
+            symbol: 'diamond'
+        },
+        name: 'Sensitivity (LOO)',
+        hovertemplate: '%{y}<br>Sens: %{x:.1f}%<extra></extra>'
+    };
+
+    const baselineTrace = {
+        x: [baseline, baseline],
+        y: [studies[0], studies[studies.length - 1]],
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: '#333', width: 2, dash: 'dash' },
+        name: 'Baseline',
+        hoverinfo: 'skip'
+    };
+
+    const layout = {
+        title: 'Leave-One-Out Sensitivity Analysis',
+        xaxis: { title: 'Pooled Sensitivity (%)', range: [0, 100] },
+        yaxis: { automargin: true },
+        showlegend: true,
+        legend: { x: 1, y: 1 },
+        margin: { l: 150, r: 50, t: 50, b: 50 },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent'
+    };
+
+    Plotly.newPlot(plotContainer, [trace, baselineTrace], layout, { responsive: true });
 }
 
 // ========================

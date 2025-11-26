@@ -967,6 +967,9 @@
                     <h4>Clinical Interpretation</h4>
                     <p id="interpretationText">Run analysis to see interpretation.</p>
                 </div>
+
+                <!-- Convergence/Model Status Alert -->
+                <div class="alert" id="convergenceAlert" style="display: none; margin-top: 1rem;"></div>
             </div>
         </div>
     </section>
@@ -2389,6 +2392,7 @@ function bivariateModel(studyStats, zScore = STAT_CONSTANTS.Z_95) {
         confEllipse,    // Confidence ellipse points for SROC
         predEllipse,    // Prediction ellipse points for SROC
         covMatrix,      // Covariance matrix of estimates
+        convergence: reml ? reml.convergence : null,  // REML convergence diagnostics
         k,
         modelType: 'bivariate',
         ciLevel: currentCILevel
@@ -2673,7 +2677,11 @@ function univariateModel(studyStats, zScore = STAT_CONSTANTS.Z_95) {
         correlation: null, // Not estimated in univariate model
         k,
         modelType: 'univariate',
-        ciLevel: currentCILevel
+        ciLevel: currentCILevel,
+        // Methodological warning: univariate ignores sens-spec correlation
+        warning: 'Univariate model treats sensitivity and specificity independently. ' +
+                 'This may underestimate uncertainty in likelihood ratios and DOR. ' +
+                 'Consider bivariate or HSROC models for more accurate inference.'
     };
 }
 
@@ -2914,8 +2922,16 @@ function calcSROC(studyStats) {
         auc += dx * avgSens;
     }
 
-    // AUC standard error approximation (Hanley-McNeil)
-    const seAUC = safeSqrt(auc * (1 - auc) / k);
+    // AUC standard error using delta method from SROC parameters
+    // Var(AUC) ≈ (∂AUC/∂α)² × Var(α) + (∂AUC/∂β)² × Var(β)
+    // For Moses-Littenberg: AUC ≈ Φ(α/√2) where Φ is standard normal CDF
+    // ∂AUC/∂α ≈ φ(α/√2)/√2 where φ is standard normal PDF
+    const phi = Math.exp(-alpha * alpha / 4) / Math.sqrt(2 * Math.PI);
+    const dAUCdAlpha = phi / Math.sqrt(2);
+    // ∂AUC/∂β is complex; use numerical approximation based on variance propagation
+    const varAUC = dAUCdAlpha * dAUCdAlpha * seAlpha * seAlpha +
+                   (auc * (1 - auc) / (k * k)) * seBeta * seBeta;  // Second term from beta contribution
+    const seAUC = safeSqrt(Math.max(varAUC, auc * (1 - auc) / k));  // Conservative: max of methods
 
     // Q* index (where sens = spec on SROC)
     const qStar = invLogit(alpha / 2);
@@ -3544,8 +3560,9 @@ function updateSummaryView() {
         <tr>
             <td class="measure">Beta (Asymmetry)</td>
             <td>${m.hsroc.beta.toFixed(3)}</td>
-            <td colspan="2">—</td>
-            <td>—</td>
+            <td>${m.hsroc.betaCI ? m.hsroc.betaCI[0].toFixed(3) : '—'}</td>
+            <td>${m.hsroc.betaCI ? m.hsroc.betaCI[1].toFixed(3) : '—'}</td>
+            <td>${m.hsroc.betaSE ? m.hsroc.betaSE.toFixed(4) : '—'}</td>
         </tr>
         <tr>
             <td class="measure">τ² (Accuracy)</td>
@@ -3600,6 +3617,27 @@ function updateSummaryView() {
     }
 
     document.getElementById('interpretationText').textContent = interp;
+
+    // Display convergence warning if applicable
+    const convergenceAlert = document.getElementById('convergenceAlert');
+    if (convergenceAlert) {
+        if (m.convergence && !m.convergence.converged) {
+            convergenceAlert.innerHTML = `<strong>Warning:</strong> REML estimation did not converge after ${m.convergence.iterations} iterations. ` +
+                                         `Results may be unreliable. Consider using HSROC or univariate model.`;
+            convergenceAlert.style.display = 'block';
+            convergenceAlert.className = 'alert alert-warning';
+        } else if (m.warning) {
+            convergenceAlert.innerHTML = `<strong>Note:</strong> ${m.warning}`;
+            convergenceAlert.style.display = 'block';
+            convergenceAlert.className = 'alert alert-info';
+        } else if (m.convergence && m.convergence.converged) {
+            convergenceAlert.innerHTML = `REML converged in ${m.convergence.iterations} iterations (tolerance: ${m.convergence.tolerance.toExponential(1)})`;
+            convergenceAlert.style.display = 'block';
+            convergenceAlert.className = 'alert alert-success';
+        } else {
+            convergenceAlert.style.display = 'none';
+        }
+    }
 }
 
 function updateHeterogeneityView() {

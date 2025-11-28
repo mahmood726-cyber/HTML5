@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 
 <html lang="en"> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>DTA Meta-Analysis Suite — Diagnostic Test Accuracy Analysis</title> <meta name="description" content="Comprehensive diagnostic test accuracy meta-analysis with bivariate modeling, SROC curves, QUADAS-2, Fagan nomogram, and Deeks' funnel plot"> <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script> <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"> <style> :root { --bg-base: #fafaf9; --bg-paper: #ffffff; --bg-elevated: #f5f5f4; --bg-sunken: #e7e5e4; --bg-dark: #1c1917; --border-light: #e7e5e4; --border-default: #d6d3d1; --border-strong: #a8a29e; --text-primary: #1c1917; --text-secondary: #57534e; --text-tertiary: #78716c; --text-inverse: #fafaf9; --accent-primary: #0369a1; --accent-primary-light: #e0f2fe; --accent-secondary: #7c3aed; --accent-secondary-light: #ede9fe; --sensitivity: #0891b2; --sensitivity-light: #cffafe; --specificity: #be185d; --specificity-light: #fce7f3; --success: #059669; --success-light: #d1fae5; --warning: #d97706; --warning-light: #fef3c7; --danger: #dc2626; --danger-light: #fee2e2; --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --shadow-xs: 0 1px 2px rgba(0,0,0,0.04); --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04); --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.06), 0 2px 4px -1px rgba(0,0,0,0.04); --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.06), 0 4px 6px -2px rgba(0,0,0,0.03); --shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.08), 0 10px 10px -5px rgba(0,0,0,0.02); --font-serif: 'Crimson Pro', Georgia, serif; --font-sans: 'DM Sans', -apple-system, sans-serif; --font-mono: 'IBM Plex Mono', monospace; --transition-fast: 120ms ease; --transition-normal: 200ms ease; --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1); }
     [data-theme="dark"] {
@@ -1399,7 +1399,20 @@ function removeStudy(id) {
 function updateStudy(id, field, value) {
     const study = studies.find(s => s.id === id);
     if (study) {
-        study[field] = field === 'name' ? value : (value === '' ? '' : parseFloat(value));
+        if (field === 'name') {
+            study[field] = value;
+        } else {
+            // Validate numeric fields - must be non-negative integers
+            const numValue = parseFloat(value);
+            if (value === '' || value === null) {
+                study[field] = '';
+            } else if (isNaN(numValue) || numValue < 0) {
+                showToast('Values must be non-negative numbers', 'error');
+                return; // Don't update with invalid value
+            } else {
+                study[field] = Math.floor(numValue); // Ensure integer
+            }
+        }
         renderDataTable();
         updateQuickStats();
     }
@@ -1631,16 +1644,16 @@ function bivariateModel(studyStats) {
     // DOR
     const DOR = PLR / NLR;
     
-    // Approximate CIs for LRs using delta method
-    const plrSE = PLR * Math.sqrt(Math.pow(sensRE.se, 2) + Math.pow(specRE.se, 2));
-    const nlrSE = NLR * Math.sqrt(Math.pow(sensRE.se, 2) + Math.pow(specRE.se, 2));
-    
-    // Log-scale CIs for LRs
+    // Log-scale CIs for LRs using delta method
     const logPLR = Math.log(PLR);
     const logNLR = Math.log(NLR);
     const logPLRSE = Math.sqrt(Math.pow(sensRE.se / pooledSens, 2) + Math.pow(specRE.se / (1 - pooledSpec), 2));
     const logNLRSE = Math.sqrt(Math.pow(sensRE.se / (1 - pooledSens), 2) + Math.pow(specRE.se / pooledSpec, 2));
-    
+
+    // DOR CI using log-scale delta method
+    const logDOR = Math.log(DOR);
+    const logDORSE = Math.sqrt(Math.pow(logPLRSE, 2) + Math.pow(logNLRSE, 2));
+
     return {
         sensitivity: {
             estimate: pooledSens,
@@ -1668,7 +1681,7 @@ function bivariateModel(studyStats) {
         },
         DOR: {
             estimate: DOR,
-            ci: [DOR * 0.5, DOR * 2] // Rough approximation
+            ci: [Math.exp(logDOR - 1.96 * logDORSE), Math.exp(logDOR + 1.96 * logDORSE)]
         },
         correlation,
         k
@@ -1717,18 +1730,34 @@ function calcSROC(studyStats) {
         const avgSens = (srocPoints[i].sens + srocPoints[i-1].sens) / 2;
         auc += dx * avgSens;
     }
-    
+
     // Q* index (where sens = spec on SROC)
     const qStar = invLogit(alpha / 2);
-    
+
     // D-prime (discriminability index)
     const dPrime = alpha / Math.sqrt(2);
-    
+
+    // Calculate AUC standard error using variance of alpha
+    // SE(AUC) approximated from regression residuals
+    let ssRes = 0;
+    for (let i = 0; i < k; i++) {
+        const predicted = alpha + beta * S[i];
+        ssRes += Math.pow(D[i] - predicted, 2);
+    }
+    const mse = ssRes / (k - 2);
+    const ssS = S.reduce((sum, s) => sum + Math.pow(s - meanS, 2), 0);
+    const seAlpha = Math.sqrt(mse * (1/k + meanS*meanS/ssS));
+
+    // AUC SE derived from alpha SE (simplified approximation)
+    // Using delta method: SE(AUC) ≈ |dAUC/dAlpha| * SE(alpha)
+    const aucSE = Math.min(0.1, seAlpha * 0.1); // Constrained approximation
+
     return {
         points: srocPoints,
         alpha,
         beta,
         auc: Math.max(0.5, Math.min(1, auc)),
+        aucSE,
         qStar,
         dPrime
     };
@@ -1738,21 +1767,28 @@ function calcSROC(studyStats) {
 function thresholdEffectTest(studyStats) {
     const k = studyStats.length;
     if (k < 4) return { rho: null, p: null };
-    
+
     const sens = studyStats.map(s => s.sens);
     const spec = studyStats.map(s => s.spec);
-    
-    // Rank the values
+
+    // Rank the values with tie handling
     function rank(arr) {
         const sorted = arr.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
         const ranks = new Array(arr.length);
-        sorted.forEach((item, r) => { ranks[item.i] = r + 1; });
+        let i = 0;
+        while (i < sorted.length) {
+            let j = i;
+            while (j < sorted.length && sorted[j].v === sorted[i].v) j++;
+            const avgRank = (i + j + 1) / 2;
+            for (let m = i; m < j; m++) ranks[sorted[m].i] = avgRank;
+            i = j;
+        }
         return ranks;
     }
-    
+
     const rankSens = rank(sens);
     const rankSpec = rank(spec);
-    
+
     // Spearman correlation
     let sumD2 = 0;
     for (let i = 0; i < k; i++) {
@@ -1760,13 +1796,116 @@ function thresholdEffectTest(studyStats) {
         sumD2 += d * d;
     }
     const rho = 1 - (6 * sumD2) / (k * (k * k - 1));
-    
-    // Approximate p-value using t-distribution
-    const t = rho * Math.sqrt((k - 2) / (1 - rho * rho));
-    // Simple approximation for p-value
-    const p = 2 * (1 - normalCDF(Math.abs(t) * Math.sqrt(k / 10)));
-    
+
+    // P-value using t-distribution approximation
+    // t = rho * sqrt((n-2)/(1-rho^2)) follows t-distribution with n-2 df
+    const rhoSq = rho * rho;
+    if (rhoSq >= 1) return { rho, p: rhoSq === 1 ? 0 : null };
+
+    const t = rho * Math.sqrt((k - 2) / (1 - rhoSq));
+    const df = k - 2;
+    const p = 2 * tDistCDF(-Math.abs(t), df);
+
     return { rho, p };
+}
+
+// T-distribution CDF approximation (for p-value calculation)
+function tDistCDF(t, df) {
+    // Use approximation based on incomplete beta function
+    const x = df / (df + t * t);
+    const a = df / 2;
+    const b = 0.5;
+
+    // Regularized incomplete beta function approximation
+    if (t <= 0) {
+        return 0.5 * incompleteBeta(x, a, b);
+    } else {
+        return 1 - 0.5 * incompleteBeta(x, a, b);
+    }
+}
+
+// Incomplete beta function approximation using continued fraction
+function incompleteBeta(x, a, b) {
+    if (x === 0) return 0;
+    if (x === 1) return 1;
+
+    // Use series expansion for small x
+    const bt = Math.exp(
+        lgamma(a + b) - lgamma(a) - lgamma(b) +
+        a * Math.log(x) + b * Math.log(1 - x)
+    );
+
+    if (x < (a + 1) / (a + b + 2)) {
+        return bt * betaCF(x, a, b) / a;
+    } else {
+        return 1 - bt * betaCF(1 - x, b, a) / b;
+    }
+}
+
+// Continued fraction for incomplete beta
+function betaCF(x, a, b) {
+    const maxIter = 100;
+    const eps = 1e-10;
+
+    let qab = a + b;
+    let qap = a + 1;
+    let qam = a - 1;
+    let c = 1;
+    let d = 1 - qab * x / qap;
+    if (Math.abs(d) < 1e-30) d = 1e-30;
+    d = 1 / d;
+    let h = d;
+
+    for (let m = 1; m <= maxIter; m++) {
+        let m2 = 2 * m;
+        let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+        d = 1 + aa * d;
+        if (Math.abs(d) < 1e-30) d = 1e-30;
+        c = 1 + aa / c;
+        if (Math.abs(c) < 1e-30) c = 1e-30;
+        d = 1 / d;
+        h *= d * c;
+
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+        d = 1 + aa * d;
+        if (Math.abs(d) < 1e-30) d = 1e-30;
+        c = 1 + aa / c;
+        if (Math.abs(c) < 1e-30) c = 1e-30;
+        d = 1 / d;
+        let del = d * c;
+        h *= del;
+
+        if (Math.abs(del - 1) < eps) break;
+    }
+    return h;
+}
+
+// Log gamma function (Lanczos approximation)
+function lgamma(x) {
+    const g = 7;
+    const c = [
+        0.99999999999980993,
+        676.5203681218851,
+        -1259.1392167224028,
+        771.32342877765313,
+        -176.61502916214059,
+        12.507343278686905,
+        -0.13857109526572012,
+        9.9843695780195716e-6,
+        1.5056327351493116e-7
+    ];
+
+    if (x < 0.5) {
+        return Math.log(Math.PI / Math.sin(Math.PI * x)) - lgamma(1 - x);
+    }
+
+    x -= 1;
+    let a = c[0];
+    for (let i = 1; i < g + 2; i++) {
+        a += c[i] / (x + i);
+    }
+    const t = x + g + 0.5;
+    return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
 }
 
 // Normal CDF approximation
@@ -2169,7 +2308,7 @@ function plotForestSpecificity() {
         showlegend: false
     };
     
-    Plotly.newPlot('forestSpecPlot', [trace, summaryLine], layout, { responsive: true });
+    Plotly.newPlot('forestSpecPlot', [trace, summaryLine], layout, { responsive: true }).catch(e => console.error('Forest spec plot error:', e));
 }
 
 function plotPairedForest() {
@@ -2281,7 +2420,7 @@ function plotPairedForest() {
         }]
     };
     
-    Plotly.newPlot('pairedForestPlot', [sensPts, specPts, summSens, summSpec], layout, { responsive: true });
+    Plotly.newPlot('pairedForestPlot', [sensPts, specPts, summSens, summSpec], layout, { responsive: true }).catch(e => console.error('Paired forest plot error:', e));
 }
 
 function plotSROC() {
@@ -2405,12 +2544,14 @@ function plotSROC() {
         aspectratio: { x: 1, y: 1 }
     };
     
-    Plotly.newPlot('srocPlot', traces, layout, { responsive: true });
-    
+    Plotly.newPlot('srocPlot', traces, layout, { responsive: true }).catch(e => console.error('SROC plot error:', e));
+
     // Update stats
     if (sroc) {
         document.getElementById('aucValue').textContent = sroc.auc.toFixed(3);
-        document.getElementById('aucCI').textContent = `(${(sroc.auc - 0.05).toFixed(3)}–${Math.min(1, sroc.auc + 0.05).toFixed(3)})`;
+        const aucLower = Math.max(0.5, sroc.auc - 1.96 * sroc.aucSE);
+        const aucUpper = Math.min(1, sroc.auc + 1.96 * sroc.aucSE);
+        document.getElementById('aucCI').textContent = `(${aucLower.toFixed(3)}–${aucUpper.toFixed(3)})`;
         document.getElementById('qstarValue').textContent = (sroc.qStar * 100).toFixed(1) + '%';
         document.getElementById('dPrimeValue').textContent = sroc.dPrime.toFixed(2);
     }
@@ -2513,7 +2654,7 @@ function plotROCSpace() {
         legend: { x: 0.02, y: 0.98 }
     };
     
-    Plotly.newPlot('rocSpacePlot', [trace, regressionLine], layout, { responsive: true });
+    Plotly.newPlot('rocSpacePlot', [trace, regressionLine], layout, { responsive: true }).catch(e => console.error('ROC space plot error:', e));
 }
 
 function plotDeeksFunnel() {
@@ -2526,7 +2667,7 @@ function plotDeeksFunnel() {
         Plotly.newPlot('deeksPlot', [], {
             paper_bgcolor: c.paper,
             plot_bgcolor: c.paper
-        }).catch(() => {});
+        }).catch(e => console.error('Deeks plot error:', e));
         return;
     }
     
@@ -2576,8 +2717,8 @@ function plotDeeksFunnel() {
         legend: { x: 0.02, y: 0.98 }
     };
     
-    Plotly.newPlot('deeksPlot', [trace, regressionLine], layout, { responsive: true });
-    
+    Plotly.newPlot('deeksPlot', [trace, regressionLine], layout, { responsive: true }).catch(e => console.error('Deeks plot error:', e));
+
     // Update statistics
     document.getElementById('deeksSlope').textContent = deeks.slope.toFixed(3);
     document.getElementById('deeksP').textContent = deeks.p < 0.001 ? '<0.001' : deeks.p.toFixed(3);
@@ -2678,7 +2819,7 @@ function plotQUADASSummary() {
         Plotly.newPlot('quadasSummaryPlot', [], {
             paper_bgcolor: c.paper,
             plot_bgcolor: c.paper
-        });
+        }).catch(e => console.error('QUADAS summary plot error:', e));
         return;
     }
     
@@ -2738,8 +2879,8 @@ function plotQUADASSummary() {
         legend: { orientation: 'h', y: -0.3 }
     };
     
-    Plotly.newPlot('quadasSummaryPlot', traces, layout, { responsive: true });
-    
+    Plotly.newPlot('quadasSummaryPlot', traces, layout, { responsive: true }).catch(e => console.error('QUADAS summary plot error:', e));
+
     // Traffic light plot
     const trafficData = [];
     
@@ -2781,7 +2922,7 @@ function plotQUADASSummary() {
         margin: { l: 100, r: 20, t: 50, b: 20 }
     };
     
-    Plotly.newPlot('quadasTrafficPlot', trafficData, trafficLayout, { responsive: true });
+    Plotly.newPlot('quadasTrafficPlot', trafficData, trafficLayout, { responsive: true }).catch(e => console.error('QUADAS traffic plot error:', e));
 }
 
 // ========================
@@ -2851,7 +2992,7 @@ function updateFaganPlot() {
         Plotly.newPlot('faganPlot', [], {
             paper_bgcolor: c.paper,
             plot_bgcolor: c.paper
-        });
+        }).catch(e => console.error('Fagan plot error:', e));
         return;
     }
     
@@ -2969,7 +3110,7 @@ function updateFaganPlot() {
         ]
     };
     
-    Plotly.newPlot('faganPlot', traces, layout, { responsive: true });
+    Plotly.newPlot('faganPlot', traces, layout, { responsive: true }).catch(e => console.error('Fagan plot error:', e));
 }
 
 // ========================
@@ -2977,45 +3118,63 @@ function updateFaganPlot() {
 // ========================
 function generateRCode() {
     if (!results) return;
-    
-    const dataStr = studies.filter(s => s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '').map(s => 
-        `  c(TP=${s.tp}, FP=${s.fp}, FN=${s.fn}, TN=${s.tn})  # ${s.name}`
-    ).join(',\n');
-    
+
+    const validStudies = studies.filter(s => s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '');
+    const studyNames = validStudies.map(s => `"${s.name}"`).join(', ');
+    const tpValues = validStudies.map(s => s.tp).join(', ');
+    const fpValues = validStudies.map(s => s.fp).join(', ');
+    const fnValues = validStudies.map(s => s.fn).join(', ');
+    const tnValues = validStudies.map(s => s.tn).join(', ');
+
     const code = `# DTA Meta-Analysis in R
+# Generated by DTA Meta-Analysis Suite
 
-Generated by DTA Meta-Analysis Suite
-Install required packages
-install.packages(c("mada", "metafor", "meta"))
-library(mada) library(metafor)
+# Install required packages (run once)
+# install.packages(c("mada", "metafor", "meta"))
 
-Study data
-data <- data.frame( study = c(${studies.filter(s => s.tp !== '').map(s => "${s.name}").join(', ')}), TP = c(${studies.filter(s => s.tp !== '').map(s => s.tp).join(', ')}), FP = c(${studies.filter(s => s.fp !== '').map(s => s.fp).join(', ')}), FN = c(${studies.filter(s => s.fn !== '').map(s => s.fn).join(', ')}), TN = c(${studies.filter(s => s.tn !== '').map(s => s.tn).join(', ')}) )
+library(mada)
+library(metafor)
 
-Bivariate random effects model (Reitsma)
-fit <- reitsma(data) summary(fit)
+# Study data
+data <- data.frame(
+  study = c(${studyNames}),
+  TP = c(${tpValues}),
+  FP = c(${fpValues}),
+  FN = c(${fnValues}),
+  TN = c(${tnValues})
+)
 
-Forest plots
-forest(madad(data), type = "sens") forest(madad(data), type = "spec")
+# Bivariate random effects model (Reitsma)
+fit <- reitsma(data)
+summary(fit)
 
-SROC curve
-plot(fit, sroclwd = 2, main = "SROC Curve") points(fpr(data), sens(data), pch = 19)
+# Forest plots
+forest(madad(data), type = "sens")
+forest(madad(data), type = "spec")
 
-Calculate summary estimates
-sens_sum <- summary(fit)$coefficients["tsens.", "Estimate"] spec_sum <- summary(fit)$coefficients["tfpr.", "Estimate"]
+# SROC curve
+plot(fit, sroclwd = 2, main = "SROC Curve")
+points(fpr(data), sens(data), pch = 19)
 
-cat("\nSummary Sensitivity:", plogis(sens_sum)) cat("\nSummary Specificity:", 1 - plogis(spec_sum))
+# Calculate summary estimates
+sens_sum <- summary(fit)$coefficients["tsens.", "Estimate"]
+spec_sum <- summary(fit)$coefficients["tfpr.", "Estimate"]
 
-Heterogeneity
-cat("\nI² Sensitivity:", round(summary(fit)$Isens, 1), "%") cat("\nI² Specificity:", round(summary(fit)$Ifpr, 1), "%")
+cat("\\nSummary Sensitivity:", plogis(sens_sum))
+cat("\\nSummary Specificity:", 1 - plogis(spec_sum))
 
-Likelihood ratios
-posLR(fit) negLR(fit)
+# Heterogeneity
+cat("\\nI² Sensitivity:", round(summary(fit)$Isens, 1), "%")
+cat("\\nI² Specificity:", round(summary(fit)$Ifpr, 1), "%")
 
-DOR
+# Likelihood ratios
+posLR(fit)
+negLR(fit)
+
+# Diagnostic Odds Ratio
 DOR(fit)
 
-HSROC model alternative
+# HSROC model alternative
 fit_hsroc <- reitsma(data, method = "ml")
 summary(fit_hsroc)
 `;

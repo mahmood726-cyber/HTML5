@@ -792,7 +792,16 @@
                     </svg>
                     Study Data Entry
                 </div>
-                <div class="card-actions">
+                <div class="card-actions" style="flex-wrap: wrap; gap: 8px;">
+                    <button class="btn" onclick="importCSV()" title="Import CSV (Ctrl+O)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="12" y1="18" x2="12" y2="12"/>
+                            <polyline points="9 15 12 12 15 15"/>
+                        </svg>
+                        Import CSV
+                    </button>
                     <button class="btn" onclick="loadExampleData()">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -808,7 +817,28 @@
                         </svg>
                         Add Study
                     </button>
-                    <button class="btn btn-primary" onclick="runAnalysis()">
+                    <button class="btn" id="undoBtn" onclick="History.undo()" title="Undo (Ctrl+Z)" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="1 4 1 10 7 10"/>
+                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                        </svg>
+                        Undo
+                    </button>
+                    <button class="btn" id="redoBtn" onclick="History.redo()" title="Redo (Ctrl+Y)" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"/>
+                            <path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/>
+                        </svg>
+                        Redo
+                    </button>
+                    <button class="btn" onclick="clearAllStudies()" title="Clear all studies" style="color: var(--danger);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                        Clear
+                    </button>
+                    <button class="btn btn-primary" onclick="runAnalysis()" title="Run Analysis (Ctrl+Enter)">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polygon points="5 3 19 12 5 21 5 3"/>
                         </svg>
@@ -819,8 +849,11 @@
             <div class="card-body">
                 <div class="alert">
                     <strong>Instructions:</strong> Enter the 2×2 contingency table data for each diagnostic accuracy study.
-                    <strong>TP</strong> = True Positives, <strong>FP</strong> = False Positives, 
+                    <strong>TP</strong> = True Positives, <strong>FP</strong> = False Positives,
                     <strong>FN</strong> = False Negatives, <strong>TN</strong> = True Negatives.
+                    <br><small style="opacity: 0.8; margin-top: 4px; display: block;">
+                    <strong>Keyboard shortcuts:</strong> Ctrl+Z (Undo) | Ctrl+Y (Redo) | Ctrl+S (Save) | Ctrl+O (Import CSV) | Ctrl+Enter (Run Analysis)
+                    </small>
                 </div>
                 <div class="table-wrap">
                     <table class="data-table" id="dataTable">
@@ -1450,6 +1483,207 @@ const DOM = {
 };
 
 // ========================
+// SECURITY UTILITIES
+// ========================
+const Security = {
+    // Escape HTML to prevent XSS
+    escapeHtml(str) {
+        if (typeof str !== 'string') return str;
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    },
+
+    // Sanitize numeric input
+    sanitizeNumber(value, defaultVal = '') {
+        if (value === '' || value === null || value === undefined) return defaultVal;
+        const num = parseFloat(value);
+        if (isNaN(num) || num < 0 || num > 1e9) return defaultVal;
+        return Math.floor(num);
+    },
+
+    // Validate study name
+    sanitizeName(name) {
+        if (typeof name !== 'string') return 'Study';
+        return name.slice(0, 100).replace(/[<>\"'&]/g, '');
+    }
+};
+
+// ========================
+// UNDO/REDO SYSTEM
+// ========================
+const History = {
+    past: [],
+    future: [],
+    maxSize: 50,
+
+    save() {
+        const state = JSON.stringify(studies);
+        if (this.past.length > 0 && this.past[this.past.length - 1] === state) return;
+        this.past.push(state);
+        if (this.past.length > this.maxSize) this.past.shift();
+        this.future = [];
+        this.updateButtons();
+    },
+
+    undo() {
+        if (this.past.length <= 1) return;
+        this.future.push(this.past.pop());
+        const state = this.past[this.past.length - 1];
+        studies = JSON.parse(state);
+        renderDataTable();
+        updateQuickStats();
+        this.updateButtons();
+        showToast('Undo successful');
+    },
+
+    redo() {
+        if (this.future.length === 0) return;
+        const state = this.future.pop();
+        this.past.push(state);
+        studies = JSON.parse(state);
+        renderDataTable();
+        updateQuickStats();
+        this.updateButtons();
+        showToast('Redo successful');
+    },
+
+    updateButtons() {
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+        if (undoBtn) undoBtn.disabled = this.past.length <= 1;
+        if (redoBtn) redoBtn.disabled = this.future.length === 0;
+    },
+
+    init() {
+        this.save(); // Save initial state
+    }
+};
+
+// ========================
+// DATA PERSISTENCE
+// ========================
+const Storage = {
+    key: 'dta_meta_analysis_data',
+
+    save() {
+        try {
+            const data = {
+                studies: studies,
+                timestamp: Date.now(),
+                version: '2.1'
+            };
+            localStorage.setItem(this.key, JSON.stringify(data));
+        } catch (e) {
+            console.warn('Could not save to localStorage:', e);
+        }
+    },
+
+    load() {
+        try {
+            const saved = localStorage.getItem(this.key);
+            if (!saved) return false;
+            const data = JSON.parse(saved);
+            if (data.studies && Array.isArray(data.studies)) {
+                studies = data.studies;
+                return true;
+            }
+        } catch (e) {
+            console.warn('Could not load from localStorage:', e);
+        }
+        return false;
+    },
+
+    clear() {
+        localStorage.removeItem(this.key);
+    },
+
+    autoSave: debounce(function() {
+        Storage.save();
+    }, 1000)
+};
+
+// ========================
+// CSV IMPORT/EXPORT
+// ========================
+const CSVHandler = {
+    parse(csvText) {
+        const lines = csvText.trim().split(/\r?\n/);
+        if (lines.length < 2) throw new Error('CSV must have header and at least one data row');
+
+        const header = lines[0].toLowerCase().split(',').map(h => h.trim());
+        const requiredCols = ['tp', 'fp', 'fn', 'tn'];
+        const colIndex = {};
+
+        // Find column indices
+        requiredCols.forEach(col => {
+            const idx = header.findIndex(h => h === col || h.includes(col));
+            if (idx === -1) throw new Error(`Missing required column: ${col}`);
+            colIndex[col] = idx;
+        });
+
+        // Find optional study/name column
+        const nameIdx = header.findIndex(h => h === 'study' || h === 'name' || h === 'author');
+
+        const parsedStudies = [];
+        for (let i = 1; i < lines.length; i++) {
+            const values = this.parseCSVLine(lines[i]);
+            if (values.length < 4) continue;
+
+            const study = {
+                name: nameIdx >= 0 ? Security.sanitizeName(values[nameIdx]) : `Study ${i}`,
+                tp: Security.sanitizeNumber(values[colIndex.tp]),
+                fp: Security.sanitizeNumber(values[colIndex.fp]),
+                fn: Security.sanitizeNumber(values[colIndex.fn]),
+                tn: Security.sanitizeNumber(values[colIndex.tn])
+            };
+
+            if (study.tp !== '' && study.fp !== '' && study.fn !== '' && study.tn !== '') {
+                parsedStudies.push(study);
+            }
+        }
+
+        return parsedStudies;
+    },
+
+    parseCSVLine(line) {
+        const values = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                values.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        values.push(current.trim());
+        return values;
+    },
+
+    import(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const parsedStudies = this.parse(e.target.result);
+                    resolve(parsedStudies);
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsText(file);
+        });
+    }
+};
+
+// ========================
 // GLOBAL STATE
 // ========================
 let studies = [];
@@ -1487,73 +1721,141 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
 // DATA MANAGEMENT
 // ========================
 function addStudy(data = {}) {
-    const study = {
-        id: Date.now(),
-        name: data.name || `Study ${studies.length + 1}`,
-        tp: data.tp ?? '',
-        fp: data.fp ?? '',
-        fn: data.fn ?? '',
-        tn: data.tn ?? '',
-        quadas: {
-            patient: 'low',
-            index: 'low',
-            reference: 'low',
-            flow: 'low'
-        }
-    };
-    studies.push(study);
-    renderDataTable();
-    updateQuickStats();
-    return study;
+    try {
+        const study = {
+            id: Date.now() + Math.random(),
+            name: Security.sanitizeName(data.name) || `Study ${studies.length + 1}`,
+            tp: Security.sanitizeNumber(data.tp, ''),
+            fp: Security.sanitizeNumber(data.fp, ''),
+            fn: Security.sanitizeNumber(data.fn, ''),
+            tn: Security.sanitizeNumber(data.tn, ''),
+            quadas: {
+                patient: 'low',
+                index: 'low',
+                reference: 'low',
+                flow: 'low'
+            }
+        };
+        studies.push(study);
+        History.save();
+        Storage.autoSave();
+        renderDataTable();
+        updateQuickStats();
+        return study;
+    } catch (e) {
+        console.error('Error adding study:', e);
+        showToast('Error adding study', 'error');
+        return null;
+    }
 }
 
 function removeStudy(id) {
-    studies = studies.filter(s => s.id !== id);
-    renderDataTable();
-    updateQuickStats();
+    try {
+        const index = studies.findIndex(s => s.id === id);
+        if (index === -1) return;
+        studies.splice(index, 1);
+        History.save();
+        Storage.autoSave();
+        renderDataTable();
+        updateQuickStats();
+    } catch (e) {
+        console.error('Error removing study:', e);
+        showToast('Error removing study', 'error');
+    }
 }
 
 function updateStudy(id, field, value) {
-    const study = studies.find(s => s.id === id);
-    if (study) {
+    try {
+        const study = studies.find(s => s.id === id);
+        if (!study) return;
+
         if (field === 'name') {
-            study[field] = value;
+            study[field] = Security.sanitizeName(value);
         } else {
-            // Validate numeric fields - must be non-negative integers
-            const numValue = parseFloat(value);
-            if (value === '' || value === null) {
-                study[field] = '';
-            } else if (isNaN(numValue) || numValue < 0) {
+            const numValue = Security.sanitizeNumber(value, null);
+            if (numValue === null && value !== '' && value !== null) {
                 showToast('Values must be non-negative numbers', 'error');
-                return; // Don't update with invalid value
-            } else {
-                study[field] = Math.floor(numValue); // Ensure integer
+                return;
             }
+            study[field] = numValue === null ? '' : numValue;
         }
+
+        History.save();
+        Storage.autoSave();
         renderDataTable();
         updateQuickStats();
+    } catch (e) {
+        console.error('Error updating study:', e);
+        showToast('Error updating study', 'error');
     }
+}
+
+function clearAllStudies() {
+    if (!confirm('Are you sure you want to clear all studies? This cannot be undone.')) return;
+    studies = [];
+    results = null;
+    History.save();
+    Storage.autoSave();
+    renderDataTable();
+    updateQuickStats();
+    showToast('All studies cleared');
+}
+
+async function importCSV() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,.txt';
+
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+            const importedStudies = await CSVHandler.import(file);
+            if (importedStudies.length === 0) {
+                showToast('No valid studies found in CSV', 'error');
+                return;
+            }
+
+            // Ask user whether to append or replace
+            const append = confirm(`Found ${importedStudies.length} studies. Click OK to add to existing data, or Cancel to replace all data.`);
+
+            if (!append) {
+                studies = [];
+            }
+
+            importedStudies.forEach(s => addStudy(s));
+            showToast(`Imported ${importedStudies.length} studies`);
+        } catch (err) {
+            console.error('CSV import error:', err);
+            showToast(`Import failed: ${err.message}`, 'error');
+        }
+    };
+
+    input.click();
 }
 
 function renderDataTable() {
     Perf.start('renderDataTable');
     const tbody = DOM.get('dataBody');
+    if (!tbody) return;
 
-    // Build HTML string efficiently
+    // Build HTML string efficiently with XSS protection
     const rows = new Array(studies.length);
     for (let i = 0; i < studies.length; i++) {
         const study = studies[i];
         const sens = calcSensitivity(study);
         const spec = calcSpecificity(study);
-        rows[i] = `<tr data-id="${study.id}">
-            <td><input type="text" value="${study.name}" data-field="name"></td>
-            <td><input type="number" min="0" value="${study.tp}" data-field="tp"></td>
-            <td><input type="number" min="0" value="${study.fp}" data-field="fp"></td>
-            <td><input type="number" min="0" value="${study.fn}" data-field="fn"></td>
-            <td><input type="number" min="0" value="${study.tn}" data-field="tn"></td>
-            <td style="font-family: var(--font-mono); color: var(--sensitivity);">${sens !== null ? (sens * 100).toFixed(1) + '%' : '—'}</td>
-            <td style="font-family: var(--font-mono); color: var(--specificity);">${spec !== null ? (spec * 100).toFixed(1) + '%' : '—'}</td>
-            <td><button class="delete-btn" data-action="delete">×</button></td>
+        const escapedName = Security.escapeHtml(study.name);
+        rows[i] = `<tr data-id="${study.id}" tabindex="0" role="row">
+            <td><input type="text" value="${escapedName}" data-field="name" aria-label="Study name"></td>
+            <td><input type="number" min="0" value="${study.tp}" data-field="tp" aria-label="True positives"></td>
+            <td><input type="number" min="0" value="${study.fp}" data-field="fp" aria-label="False positives"></td>
+            <td><input type="number" min="0" value="${study.fn}" data-field="fn" aria-label="False negatives"></td>
+            <td><input type="number" min="0" value="${study.tn}" data-field="tn" aria-label="True negatives"></td>
+            <td style="font-family: var(--font-mono); color: var(--sensitivity);" aria-label="Sensitivity">${sens !== null ? (sens * 100).toFixed(1) + '%' : '—'}</td>
+            <td style="font-family: var(--font-mono); color: var(--specificity);" aria-label="Specificity">${spec !== null ? (spec * 100).toFixed(1) + '%' : '—'}</td>
+            <td><button class="delete-btn" data-action="delete" aria-label="Delete study" title="Delete this study">×</button></td>
         </tr>`;
     }
     tbody.innerHTML = rows.join('');
@@ -3685,19 +3987,90 @@ window.Perf = Perf;
 // INITIALIZATION
 // ========================
 function initApp() {
-    // Add initial empty rows
-    addStudy();
-    addStudy();
-    addStudy();
-    
-    // Update stats
+    // Try to load saved data first
+    const hasData = Storage.load();
+
+    if (hasData && studies.length > 0) {
+        showToast(`Restored ${studies.length} studies from previous session`);
+    } else {
+        // Add initial empty rows if no saved data
+        addStudy();
+        addStudy();
+        addStudy();
+    }
+
+    // Initialize history with current state
+    History.init();
+
+    // Update UI
     updateQuickStats();
-    
-    // Render QUADAS grid
     renderQUADASGrid();
-    
-    console.log('DTA Meta-Analysis Suite initialized');
+
+    // Setup keyboard shortcuts
+    setupKeyboardShortcuts();
+
+    console.log('DTA Meta-Analysis Suite v2.1 initialized');
+    console.log('Available commands: runBenchmark(), Perf.report(), History.undo(), History.redo()');
 }
+
+// ========================
+// KEYBOARD SHORTCUTS
+// ========================
+function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Check for modifier key (Ctrl on Windows/Linux, Cmd on Mac)
+        const modifier = e.ctrlKey || e.metaKey;
+
+        if (modifier) {
+            switch (e.key.toLowerCase()) {
+                case 'z':
+                    if (e.shiftKey) {
+                        e.preventDefault();
+                        History.redo();
+                    } else {
+                        e.preventDefault();
+                        History.undo();
+                    }
+                    break;
+                case 'y':
+                    e.preventDefault();
+                    History.redo();
+                    break;
+                case 's':
+                    e.preventDefault();
+                    Storage.save();
+                    showToast('Data saved');
+                    break;
+                case 'o':
+                    e.preventDefault();
+                    importCSV();
+                    break;
+                case 'enter':
+                    e.preventDefault();
+                    runAnalysis();
+                    break;
+            }
+        }
+
+        // Non-modifier shortcuts
+        if (e.key === 'Escape') {
+            // Close any open modals or reset focus
+            document.activeElement?.blur();
+        }
+    });
+}
+
+// ========================
+// EXPOSE GLOBAL FUNCTIONS
+// ========================
+window.addStudy = addStudy;
+window.removeStudy = removeStudy;
+window.updateStudy = updateStudy;
+window.runAnalysis = runAnalysis;
+window.importCSV = importCSV;
+window.clearAllStudies = clearAllStudies;
+window.History = History;
+window.Storage = Storage;
 
 // Wait for DOM and Plotly to be ready
 if (document.readyState === 'loading') {

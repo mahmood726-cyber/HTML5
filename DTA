@@ -1333,6 +1333,123 @@ Run analysis first to generate R code
 
 <script>
 // ========================
+// PERFORMANCE MONITORING
+// ========================
+const Perf = {
+    marks: new Map(),
+    measurements: new Map(),
+    enabled: true,
+
+    start(label) {
+        if (!this.enabled) return;
+        this.marks.set(label, performance.now());
+    },
+
+    end(label) {
+        if (!this.enabled || !this.marks.has(label)) return 0;
+        const duration = performance.now() - this.marks.get(label);
+        if (!this.measurements.has(label)) {
+            this.measurements.set(label, []);
+        }
+        this.measurements.get(label).push(duration);
+        this.marks.delete(label);
+        return duration;
+    },
+
+    getStats(label) {
+        const times = this.measurements.get(label);
+        if (!times || times.length === 0) return null;
+        const sum = times.reduce((a, b) => a + b, 0);
+        const avg = sum / times.length;
+        const min = Math.min(...times);
+        const max = Math.max(...times);
+        return { count: times.length, avg: avg.toFixed(2), min: min.toFixed(2), max: max.toFixed(2), total: sum.toFixed(2) };
+    },
+
+    report() {
+        console.group('⚡ Performance Report');
+        for (const [label, times] of this.measurements) {
+            const stats = this.getStats(label);
+            console.log(`${label}: avg=${stats.avg}ms, min=${stats.min}ms, max=${stats.max}ms, calls=${stats.count}`);
+        }
+        console.groupEnd();
+        return Object.fromEntries([...this.measurements.keys()].map(k => [k, this.getStats(k)]));
+    },
+
+    clear() {
+        this.marks.clear();
+        this.measurements.clear();
+    },
+
+    benchmark(fn, label, iterations = 100) {
+        const times = [];
+        for (let i = 0; i < iterations; i++) {
+            const start = performance.now();
+            fn();
+            times.push(performance.now() - start);
+        }
+        const avg = times.reduce((a, b) => a + b, 0) / iterations;
+        console.log(`Benchmark "${label}": ${avg.toFixed(3)}ms avg over ${iterations} iterations`);
+        return avg;
+    }
+};
+
+// ========================
+// UTILITY FUNCTIONS
+// ========================
+
+// Debounce function for input handlers
+function debounce(fn, delay = 150) {
+    let timeoutId;
+    return function (...args) {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
+// Throttle function for continuous updates
+function throttle(fn, limit = 16) {
+    let inThrottle;
+    return function (...args) {
+        if (!inThrottle) {
+            fn.apply(this, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    };
+}
+
+// Memoization for expensive calculations
+function memoize(fn) {
+    const cache = new Map();
+    return function (...args) {
+        const key = JSON.stringify(args);
+        if (cache.has(key)) return cache.get(key);
+        const result = fn.apply(this, args);
+        cache.set(key, result);
+        if (cache.size > 100) { // Limit cache size
+            const firstKey = cache.keys().next().value;
+            cache.delete(firstKey);
+        }
+        return result;
+    };
+}
+
+// DOM element cache
+const DOM = {
+    cache: new Map(),
+    get(id) {
+        if (!this.cache.has(id)) {
+            this.cache.set(id, document.getElementById(id));
+        }
+        return this.cache.get(id);
+    },
+    clear() {
+        this.cache.clear();
+    }
+};
+
+// ========================
 // GLOBAL STATE
 // ========================
 let studies = [];
@@ -1419,26 +1536,59 @@ function updateStudy(id, field, value) {
 }
 
 function renderDataTable() {
-    const tbody = document.getElementById('dataBody');
-    tbody.innerHTML = studies.map(study => {
+    Perf.start('renderDataTable');
+    const tbody = DOM.get('dataBody');
+
+    // Build HTML string efficiently
+    const rows = new Array(studies.length);
+    for (let i = 0; i < studies.length; i++) {
+        const study = studies[i];
         const sens = calcSensitivity(study);
         const spec = calcSpecificity(study);
-        return `
-            <tr>
-                <td><input type="text" value="${study.name}" onchange="updateStudy(${study.id}, 'name', this.value)"></td>
-                <td><input type="number" min="0" value="${study.tp}" onchange="updateStudy(${study.id}, 'tp', this.value)"></td>
-                <td><input type="number" min="0" value="${study.fp}" onchange="updateStudy(${study.id}, 'fp', this.value)"></td>
-                <td><input type="number" min="0" value="${study.fn}" onchange="updateStudy(${study.id}, 'fn', this.value)"></td>
-                <td><input type="number" min="0" value="${study.tn}" onchange="updateStudy(${study.id}, 'tn', this.value)"></td>
-                <td style="font-family: var(--font-mono); color: var(--sensitivity);">${sens !== null ? (sens * 100).toFixed(1) + '%' : '—'}</td>
-                <td style="font-family: var(--font-mono); color: var(--specificity);">${spec !== null ? (spec * 100).toFixed(1) + '%' : '—'}</td>
-                <td><button class="delete-btn" onclick="removeStudy(${study.id})">×</button></td>
-            </tr>
-        `;
-    }).join('');
-    
+        rows[i] = `<tr data-id="${study.id}">
+            <td><input type="text" value="${study.name}" data-field="name"></td>
+            <td><input type="number" min="0" value="${study.tp}" data-field="tp"></td>
+            <td><input type="number" min="0" value="${study.fp}" data-field="fp"></td>
+            <td><input type="number" min="0" value="${study.fn}" data-field="fn"></td>
+            <td><input type="number" min="0" value="${study.tn}" data-field="tn"></td>
+            <td style="font-family: var(--font-mono); color: var(--sensitivity);">${sens !== null ? (sens * 100).toFixed(1) + '%' : '—'}</td>
+            <td style="font-family: var(--font-mono); color: var(--specificity);">${spec !== null ? (spec * 100).toFixed(1) + '%' : '—'}</td>
+            <td><button class="delete-btn" data-action="delete">×</button></td>
+        </tr>`;
+    }
+    tbody.innerHTML = rows.join('');
+
+    Perf.end('renderDataTable');
     renderQUADASGrid();
 }
+
+// Event delegation for data table (more efficient than inline handlers)
+document.addEventListener('DOMContentLoaded', () => {
+    const dataBody = document.getElementById('dataBody');
+    if (dataBody) {
+        // Handle input changes with debouncing
+        dataBody.addEventListener('change', (e) => {
+            const input = e.target;
+            if (input.tagName === 'INPUT') {
+                const row = input.closest('tr');
+                const studyId = parseInt(row.dataset.id);
+                const field = input.dataset.field;
+                if (field) {
+                    updateStudy(studyId, field, input.value);
+                }
+            }
+        });
+
+        // Handle delete button clicks
+        dataBody.addEventListener('click', (e) => {
+            if (e.target.dataset.action === 'delete') {
+                const row = e.target.closest('tr');
+                const studyId = parseInt(row.dataset.id);
+                removeStudy(studyId);
+            }
+        });
+    }
+});
 
 function calcSensitivity(study) {
     if (study.tp === '' || study.fn === '') return null;
@@ -1453,20 +1603,28 @@ function calcSpecificity(study) {
 }
 
 function updateQuickStats() {
-    const validStudies = studies.filter(s => s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '');
-    let totalPatients = 0, totalDiseased = 0, totalHealthy = 0;
-    
-    validStudies.forEach(s => {
-        totalPatients += s.tp + s.fp + s.fn + s.tn;
-        totalDiseased += s.tp + s.fn;
-        totalHealthy += s.fp + s.tn;
-    });
-    
-    document.getElementById('statStudies').textContent = validStudies.length;
-    document.getElementById('statPatients').textContent = totalPatients.toLocaleString();
-    document.getElementById('statDiseased').textContent = totalDiseased.toLocaleString();
-    document.getElementById('statHealthy').textContent = totalHealthy.toLocaleString();
+    let validCount = 0, totalPatients = 0, totalDiseased = 0, totalHealthy = 0;
+
+    // Single pass calculation
+    for (let i = 0; i < studies.length; i++) {
+        const s = studies[i];
+        if (s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '') {
+            validCount++;
+            totalPatients += s.tp + s.fp + s.fn + s.tn;
+            totalDiseased += s.tp + s.fn;
+            totalHealthy += s.fp + s.tn;
+        }
+    }
+
+    // Use cached DOM references
+    DOM.get('statStudies').textContent = validCount;
+    DOM.get('statPatients').textContent = totalPatients.toLocaleString();
+    DOM.get('statDiseased').textContent = totalDiseased.toLocaleString();
+    DOM.get('statHealthy').textContent = totalHealthy.toLocaleString();
 }
+
+// Debounced version for rapid input changes
+const debouncedUpdateQuickStats = debounce(updateQuickStats, 100);
 
 // ========================
 // EXAMPLE DATA
@@ -1558,34 +1716,52 @@ function calcStudyStats(study) {
     };
 }
 
-// DerSimonian-Laird random effects for univariate meta-analysis
+// DerSimonian-Laird random effects for univariate meta-analysis (optimized)
 function univariateRE(values, variances) {
+    Perf.start('univariateRE');
     const k = values.length;
     if (k === 0) return null;
-    
-    // Fixed effect weights and estimate
-    const weights = variances.map(v => 1 / v);
-    const sumW = weights.reduce((a, b) => a + b, 0);
-    const fixedEst = weights.reduce((sum, w, i) => sum + w * values[i], 0) / sumW;
-    
-    // Q statistic
-    const Q = weights.reduce((sum, w, i) => sum + w * Math.pow(values[i] - fixedEst, 2), 0);
-    
+
+    // Single pass for fixed effects calculation
+    let sumW = 0, sumWV = 0, sumW2 = 0;
+    const weights = new Array(k);
+
+    for (let i = 0; i < k; i++) {
+        const w = 1 / variances[i];
+        weights[i] = w;
+        sumW += w;
+        sumWV += w * values[i];
+        sumW2 += w * w;
+    }
+
+    const fixedEst = sumWV / sumW;
+
+    // Single pass for Q statistic
+    let Q = 0;
+    for (let i = 0; i < k; i++) {
+        const diff = values[i] - fixedEst;
+        Q += weights[i] * diff * diff;
+    }
+
     // DerSimonian-Laird tau-squared
-    const sumW2 = weights.reduce((a, b) => a + b * b, 0);
     const C = sumW - sumW2 / sumW;
-    let tau2 = Math.max(0, (Q - (k - 1)) / C);
-    
-    // Random effects weights and estimate
-    const reWeights = variances.map(v => 1 / (v + tau2));
-    const sumREW = reWeights.reduce((a, b) => a + b, 0);
-    const reEst = reWeights.reduce((sum, w, i) => sum + w * values[i], 0) / sumREW;
-    const reVar = 1 / sumREW;
-    const reSE = Math.sqrt(reVar);
-    
+    const tau2 = Math.max(0, (Q - (k - 1)) / C);
+
+    // Single pass for random effects calculation
+    let sumREW = 0, sumREWV = 0;
+    for (let i = 0; i < k; i++) {
+        const rew = 1 / (variances[i] + tau2);
+        sumREW += rew;
+        sumREWV += rew * values[i];
+    }
+
+    const reEst = sumREWV / sumREW;
+    const reSE = Math.sqrt(1 / sumREW);
+
     // I-squared
     const I2 = k > 1 ? Math.max(0, (Q - (k - 1)) / Q * 100) : 0;
-    
+
+    Perf.end('univariateRE');
     return {
         estimate: reEst,
         se: reSE,
@@ -1597,25 +1773,37 @@ function univariateRE(values, variances) {
     };
 }
 
-// Bivariate random effects model (simplified REML-like estimation)
+// Bivariate random effects model (simplified REML-like estimation) - optimized
 function bivariateModel(studyStats) {
+    Perf.start('bivariateModel');
     const k = studyStats.length;
     if (k < 3) return null;
-    
-    // Extract logit-transformed values
-    const sensLogits = studyStats.map(s => s.sensLogit);
-    const specLogits = studyStats.map(s => s.specLogit);
-    const varSens = studyStats.map(s => s.varSensLogit);
-    const varSpec = studyStats.map(s => s.varSpecLogit);
-    
-    // Univariate estimates first
+
+    // Single pass extraction with pre-allocated arrays
+    const sensLogits = new Array(k);
+    const specLogits = new Array(k);
+    const varSens = new Array(k);
+    const varSpec = new Array(k);
+    let sumSensLogit = 0, sumSpecLogit = 0;
+
+    for (let i = 0; i < k; i++) {
+        const s = studyStats[i];
+        sensLogits[i] = s.sensLogit;
+        specLogits[i] = s.specLogit;
+        varSens[i] = s.varSensLogit;
+        varSpec[i] = s.varSpecLogit;
+        sumSensLogit += s.sensLogit;
+        sumSpecLogit += s.specLogit;
+    }
+
+    // Univariate estimates
     const sensRE = univariateRE(sensLogits, varSens);
     const specRE = univariateRE(specLogits, varSpec);
-    
-    // Correlation between logit(sens) and logit(spec) across studies
-    const meanSens = sensLogits.reduce((a, b) => a + b, 0) / k;
-    const meanSpec = specLogits.reduce((a, b) => a + b, 0) / k;
-    
+
+    // Correlation calculation with pre-computed means
+    const meanSens = sumSensLogit / k;
+    const meanSpec = sumSpecLogit / k;
+
     let sumProd = 0, sumSensSq = 0, sumSpecSq = 0;
     for (let i = 0; i < k; i++) {
         const ds = sensLogits[i] - meanSens;
@@ -1624,7 +1812,7 @@ function bivariateModel(studyStats) {
         sumSensSq += ds * ds;
         sumSpecSq += dc * dc;
     }
-    
+
     const correlation = sumProd / Math.sqrt(sumSensSq * sumSpecSq);
     
     // Transform back to probability scale
@@ -1654,7 +1842,7 @@ function bivariateModel(studyStats) {
     const logDOR = Math.log(DOR);
     const logDORSE = Math.sqrt(Math.pow(logPLRSE, 2) + Math.pow(logNLRSE, 2));
 
-    return {
+    const result = {
         sensitivity: {
             estimate: pooledSens,
             ci: [sensLower, sensUpper],
@@ -1686,6 +1874,8 @@ function bivariateModel(studyStats) {
         correlation,
         k
     };
+    Perf.end('bivariateModel');
+    return result;
 }
 
 // SROC curve calculation (Moses-Littenberg approach)
@@ -1968,38 +2158,52 @@ function deeksFunnelTest(studyStats) {
 // MAIN ANALYSIS
 // ========================
 function runAnalysis() {
-    const validStudies = studies.filter(s => 
+    Perf.start('runAnalysis:total');
+
+    const validStudies = studies.filter(s =>
         s.tp !== '' && s.fp !== '' && s.fn !== '' && s.tn !== '' &&
         s.tp >= 0 && s.fp >= 0 && s.fn >= 0 && s.tn >= 0
     );
-    
+
     if (validStudies.length < 2) {
         showToast('Need at least 2 valid studies to run analysis', 'error');
         return;
     }
-    
+
     // Calculate study-level statistics
-    const studyStats = validStudies.map(s => ({
-        ...calcStudyStats(s),
-        name: s.name,
-        quadas: s.quadas
-    }));
-    
+    Perf.start('runAnalysis:studyStats');
+    const studyStats = new Array(validStudies.length);
+    for (let i = 0; i < validStudies.length; i++) {
+        const s = validStudies[i];
+        studyStats[i] = {
+            ...calcStudyStats(s),
+            name: s.name,
+            quadas: s.quadas
+        };
+    }
+    Perf.end('runAnalysis:studyStats');
+
     // Run bivariate model
     const model = bivariateModel(studyStats);
     if (!model) {
         showToast('Error running bivariate model', 'error');
         return;
     }
-    
+
     // SROC curve
+    Perf.start('runAnalysis:sroc');
     const sroc = calcSROC(studyStats);
-    
+    Perf.end('runAnalysis:sroc');
+
     // Threshold effect
+    Perf.start('runAnalysis:threshold');
     const threshold = thresholdEffectTest(studyStats);
-    
+    Perf.end('runAnalysis:threshold');
+
     // Deeks' test
+    Perf.start('runAnalysis:deeks');
     const deeks = deeksFunnelTest(studyStats);
+    Perf.end('runAnalysis:deeks');
     
     results = {
         model,
@@ -2016,7 +2220,12 @@ function runAnalysis() {
     updateNomogram();
     generateRCode();
     
-    showToast(`Analysis complete: ${validStudies.length} studies analyzed`);
+    Perf.end('runAnalysis:total');
+    const totalTime = Perf.getStats('runAnalysis:total');
+    showToast(`Analysis complete: ${validStudies.length} studies in ${totalTime?.avg || '?'}ms`);
+
+    // Log performance report to console
+    console.log('Run Perf.report() in console for detailed timing breakdown');
 }
 
 // ========================
@@ -2162,7 +2371,52 @@ function updateHeterogeneityView() {
 // ========================
 // PLOTTING FUNCTIONS
 // ========================
+// Plot queue for batched rendering
+const PlotQueue = {
+    pending: [],
+    frameId: null,
+
+    add(plotFn, priority = 0) {
+        this.pending.push({ fn: plotFn, priority });
+        this.schedule();
+    },
+
+    schedule() {
+        if (this.frameId) return;
+        this.frameId = requestAnimationFrame(() => this.flush());
+    },
+
+    flush() {
+        this.frameId = null;
+        // Sort by priority (higher first)
+        this.pending.sort((a, b) => b.priority - a.priority);
+
+        const batch = this.pending.splice(0, 3); // Process 3 plots per frame
+        batch.forEach(item => {
+            try {
+                item.fn();
+            } catch (e) {
+                console.error('Plot error:', e);
+            }
+        });
+
+        // Continue if more pending
+        if (this.pending.length > 0) {
+            this.schedule();
+        }
+    },
+
+    clear() {
+        if (this.frameId) {
+            cancelAnimationFrame(this.frameId);
+            this.frameId = null;
+        }
+        this.pending = [];
+    }
+};
+
 function updateAllPlots() {
+    Perf.start('updateAllPlots');
     if (!results) return;
     if (!isPlotlyReady()) {
         console.warn('Plotly not loaded, skipping plots');
@@ -2170,14 +2424,21 @@ function updateAllPlots() {
         setTimeout(updateAllPlots, 500);
         return;
     }
-    plotForestSensitivity();
-    plotForestSpecificity();
-    plotPairedForest();
-    plotSROC();
-    plotROCSpace();
-    plotDeeksFunnel();
-    plotQUADASSummary();
-    updateFaganPlot();
+
+    // Clear any pending plots
+    PlotQueue.clear();
+
+    // Queue plots with priorities (higher = more important, rendered first)
+    PlotQueue.add(plotForestSensitivity, 10);
+    PlotQueue.add(plotForestSpecificity, 10);
+    PlotQueue.add(plotPairedForest, 8);
+    PlotQueue.add(plotSROC, 9);
+    PlotQueue.add(plotROCSpace, 5);
+    PlotQueue.add(plotDeeksFunnel, 6);
+    PlotQueue.add(plotQUADASSummary, 4);
+    PlotQueue.add(updateFaganPlot, 7);
+
+    Perf.end('updateAllPlots');
 }
 
 function getPlotColors() {
@@ -3341,6 +3602,84 @@ function safePlot(elementId, data, layout, config) {
         console.error('Plot error:', e);
     }
 }
+
+// ========================
+// BENCHMARKING
+// ========================
+function runBenchmark(numStudies = 50, iterations = 10) {
+    console.log(`\n🚀 Running benchmark with ${numStudies} studies, ${iterations} iterations...\n`);
+    Perf.clear();
+
+    // Generate synthetic data
+    const syntheticStudies = [];
+    for (let i = 0; i < numStudies; i++) {
+        syntheticStudies.push({
+            id: Date.now() + i,
+            name: `Study ${i + 1}`,
+            tp: Math.floor(Math.random() * 200) + 10,
+            fp: Math.floor(Math.random() * 100) + 5,
+            fn: Math.floor(Math.random() * 50) + 2,
+            tn: Math.floor(Math.random() * 300) + 20,
+            quadas: { patient: 'low', index: 'low', reference: 'low', flow: 'low' }
+        });
+    }
+
+    // Benchmark study stats calculation
+    const studyStatsTimes = [];
+    for (let i = 0; i < iterations; i++) {
+        const start = performance.now();
+        syntheticStudies.forEach(s => calcStudyStats(s));
+        studyStatsTimes.push(performance.now() - start);
+    }
+
+    // Benchmark bivariate model
+    const studyStats = syntheticStudies.map(s => ({
+        ...calcStudyStats(s),
+        name: s.name,
+        quadas: s.quadas
+    }));
+
+    const modelTimes = [];
+    for (let i = 0; i < iterations; i++) {
+        const start = performance.now();
+        bivariateModel(studyStats);
+        modelTimes.push(performance.now() - start);
+    }
+
+    // Benchmark SROC
+    const srocTimes = [];
+    for (let i = 0; i < iterations; i++) {
+        const start = performance.now();
+        calcSROC(studyStats);
+        srocTimes.push(performance.now() - start);
+    }
+
+    // Calculate averages
+    const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+    const min = arr => Math.min(...arr);
+    const max = arr => Math.max(...arr);
+
+    console.log('📊 Benchmark Results:');
+    console.log('─'.repeat(60));
+    console.log(`Study Stats (${numStudies} studies):`);
+    console.log(`  avg: ${avg(studyStatsTimes).toFixed(2)}ms, min: ${min(studyStatsTimes).toFixed(2)}ms, max: ${max(studyStatsTimes).toFixed(2)}ms`);
+    console.log(`Bivariate Model:`);
+    console.log(`  avg: ${avg(modelTimes).toFixed(2)}ms, min: ${min(modelTimes).toFixed(2)}ms, max: ${max(modelTimes).toFixed(2)}ms`);
+    console.log(`SROC Curve:`);
+    console.log(`  avg: ${avg(srocTimes).toFixed(2)}ms, min: ${min(srocTimes).toFixed(2)}ms, max: ${max(srocTimes).toFixed(2)}ms`);
+    console.log('─'.repeat(60));
+    console.log(`Total avg per full analysis: ${(avg(studyStatsTimes) + avg(modelTimes) + avg(srocTimes)).toFixed(2)}ms`);
+
+    return {
+        studyStats: { avg: avg(studyStatsTimes), min: min(studyStatsTimes), max: max(studyStatsTimes) },
+        bivariate: { avg: avg(modelTimes), min: min(modelTimes), max: max(modelTimes) },
+        sroc: { avg: avg(srocTimes), min: min(srocTimes), max: max(srocTimes) }
+    };
+}
+
+// Make benchmark available globally
+window.runBenchmark = runBenchmark;
+window.Perf = Perf;
 
 // ========================
 // INITIALIZATION
